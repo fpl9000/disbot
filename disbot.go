@@ -1,6 +1,11 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"os"
     "fmt"
     "log"
     "os"
@@ -14,22 +19,22 @@ import (
 
 var (
     Me = filepath.Base(os.Args[0])
-    BotToken = ""
+    apiKey = ""
     startTime = time.Now()
     prevCommandTime time.Time
 )
 
 func main() {
     // Get the bot's auth token from the environment variable.
-    BotToken = os.Getenv("DISCORD_BOT_TOKEN")
+    botToken := os.Getenv("DISCORD_BOT_TOKEN")
 
-    if BotToken == "" {
+    if botToken == "" {
         fmt.Printf("%s: Environment variable DISCORD_BOT_TOKEN is not set!\n", Me)
         os.Exit(1)
     }
 
     // Create a new Discord session using the bot token.
-    dg, err := discordgo.New("Bot " + BotToken)
+    dg, err := discordgo.New("Bot " + botToken)
     if err != nil {
         log.Fatalf("Error creating Discord session: %v", err)
     }
@@ -121,4 +126,54 @@ I also respond to these commands:
 
         prevCommandTime = thisCommandTime
     }
+}
+
+// This function generates a response to a user message received from Discord.
+func generateResponse(userMessage string) {
+    // Get the AI API key.
+    if apiKey == "" {
+        apiKey = os.Getenv("AI_API_KEY")
+
+        if apiKey == "" {
+            fmt.Println("Error: ANTHROPIC_API_KEY not set.")
+            return
+        }
+    }
+
+    // See https://docs.anthropic.com/en/api/overview for details.
+
+	url := "https://api.anthropic.com/v1/messages"
+
+	requestBody, _ := json.Marshal(map[string]interface{}{
+		"model": "claude-sonnet-4-0",
+		"max_tokens": 1024,
+		"messages": []map[string]string{
+			{ "role": "user",
+              "content": userMessage
+            },
+		},
+	})
+
+	req, _ := http.NewRequest("POST", url, bytes.NewBuffer(requestBody))
+	req.Header.Set("x-api-key", apiKey)
+	req.Header.Set("anthropic-version", "2023-06-01")
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+
+	if err != nil {
+		fmt.Println("Error sending request:", err)
+		return
+	}
+
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		fmt.Println("API returned error:", resp.Status)
+		return
+	}
+
+	// Process the response
+	// ...
 }
