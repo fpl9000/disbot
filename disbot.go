@@ -17,6 +17,7 @@ import (
     "github.com/bwmarrin/discordgo"
 )
 
+// Package scope variables.
 var (
     Me = filepath.Base(os.Args[0])
     apiKey = ""
