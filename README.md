@@ -2,7 +2,12 @@
 
 A Discord bot that responds by using an AI to generate its replies.
 
-Usage: `disbot`
+Usage:
 
-You must set environment variable `DISCORD_BOT_TOKEN` to hold the bot's Discord authentication
-token.
+```
+$ export ANTHROPIC_API_KEY="..."
+$ export DISCORD_BOT_TOKEN="..."
+$ ./disbot
+```
+
+You must set environment variables `DISCORD_BOT_TOKEN` and `ANTHROPIC_API_KEY` before launching the bot.
