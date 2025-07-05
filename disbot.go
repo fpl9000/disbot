@@ -9,6 +9,7 @@ import (
     "os"
     "os/signal"
     "path/filepath"
+    "math/rand"
     "strings"
     "time"
 
@@ -102,8 +103,12 @@ My replies will be brief, because I'm using Fran's API key to access Claude, and
         session.ChannelMessageSend(m.ChannelID, helpMsg)
 
     case "!status":
+        states := []string{"nominal", "behaving", "normal", "operational", "operating as expected", "crazy good",
+                           "within reason", "pretty good, given the state of the world", "not too bad", "killing it"}
+        state := states[rand.Intn(len(states))]  // Get a random state string.
         uptime := time.Since(startTime)
-        msg := fmt.Sprintf("All systems are nominal.  I have been running for %s.", uptime.Round(time.Second))
+
+        msg := fmt.Sprintf("All systems are %v.  I have been running for %v.", state, uptime.Round(time.Second))
         session.ChannelMessageSend(m.ChannelID, msg)
 
     default:
