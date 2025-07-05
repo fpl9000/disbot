@@ -104,7 +104,8 @@ My replies will be brief, because I'm using Fran's API key to access Claude, and
 
     case "!status":
         states := []string{"nominal", "behaving", "normal", "operational", "operating as expected", "crazy good",
-                           "within reason", "pretty good, given the state of the world", "not too bad", "killing it"}
+                           "within reason", "pretty good, given the state of the world", "not too bad", "killing it",
+                           "grooving", "just peachy", "okey dokey", "fine, just fine", "... oh never mind"}
         state := states[rand.Intn(len(states))]  // Get a random state string.
         uptime := time.Since(startTime)
 
