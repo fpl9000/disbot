@@ -288,7 +288,9 @@ func generateResponse(userMessage string) string {
         return msg
     }
 
+    // For debugging.
+    // fmt.Printf("AI response: %s\n", text)
+
     // Return the AI-generated response text.
-    fmt.Printf("AI response: %s\n", text)
     return text
 }
