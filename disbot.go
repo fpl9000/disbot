@@ -85,24 +85,21 @@ func messageCreate(session *discordgo.Session, m *discordgo.MessageCreate) {
 
     switch command {
     case "!help":
-        helpMessage := `I'm a bot written by Fran and powered by Claude.  Talk to me by starting your message with '^!^'.
-Examples:
+        // Must use '^' where we want a '`', due to Go's backtick quote syntax here.
+        helpMsg := `I'm a bot written by Fran and powered by Claude.  Talk to me by starting your message with '^!^'. For example:
 
 ^!What is the mass of Jupiter?^
-^!In philosophy, what is the Hard Problem of Consciousness?^
 ^!In 'The Lord of the Rings', who was Saruman?^
 
-My replies will be brief, because I'm using Fran's API key to access Claude, and tokens cost money.
-
-I also respond to these commands:
+My replies will be brief, because I'm using Fran's API key to access Claude, and tokens cost money.  I also respond to these commands:
 
 ^!help^   - Shows this help message.
 ^!status^ - Shows my status and uptime.`
 
-        // Replace all '^'s in helpMessage with '`'.
-        helpMessage = strings.ReplaceAll(helpMessage, "^", "`")
+        // Replace all '^'s in helpMsg with '`'.
+        helpMsg = strings.ReplaceAll(helpMsg, "^", "`")
 
-        session.ChannelMessageSend(m.ChannelID, helpMessage)
+        session.ChannelMessageSend(m.ChannelID, helpMsg)
 
     case "!status":
         uptime := time.Since(startTime)
@@ -118,7 +115,8 @@ I also respond to these commands:
 
         // Complain if userMessage is longer than 1500 characters.
         if len(userMessage) > 1500 {
-            session.ChannelMessageSend(m.ChannelID, "Sorry, I can't respond to messages that are longer than 1500 characters.")
+            msg := "Sorry, I can't respond to messages that are longer than 1500 characters."
+            session.ChannelMessageSend(m.ChannelID, msg)
             return
         }
 
@@ -127,15 +125,30 @@ I also respond to these commands:
 
         if (!prevCommandTime.IsZero() && time.Since(prevCommandTime) < 30 * time.Second) {
             // There was a previous command and less than 5 seconds have passed since it was received.
-            session.ChannelMessageSend(m.ChannelID, "Arrghhh!  I'm overloaded.  Please wait 30 seconds before trying again.")
+            msg := "Arrghhh!  I'm overloaded.  Please wait 30 seconds before trying again."
+            session.ChannelMessageSend(m.ChannelID, msg)
         } else {
-            // Generate a response from the AI and send it to the Discord server.
+            // Generate a response from the AI.
             aiResponse := generateResponse(userMessage)
+
+            // Send the response text to the Discord server.
             session.ChannelMessageSend(m.ChannelID, aiResponse)
         }
 
         prevCommandTime = thisCommandTime
     }
+}
+
+// This function returns the system prompt to be sent in each JSON request to the AI.
+func getSystemPrompt() string {
+    todaysDate := time.Now().Format(time.DateOnly)
+
+    sysPrompt := fmt.Sprintf("Today's date is %s.  You are a helpful assistant that provides concise and accurate " +
+        "answers to user queries.  Your responses should be short: only 2 or 3 sentences.  Your user is one of a " +
+        "set of people connected to a Discord server (as are you), but you cannot distinguish one user from another.",
+        todaysDate)
+
+    return sysPrompt
 }
 
 // This function obtains an AI-generated response to a user message received from Discord.  If
@@ -159,13 +172,17 @@ func generateResponse(userMessage string) string {
     url := "https://api.anthropic.com/v1/messages"
 
     // This is the AI's system prompt.
-    systemPrompt := "You are a helpful assistant that provides concise and accurate answers to user queries.  The user is one of a set of Discord users connected to a single Discord server, but you cannot distinguish one user from another.  Your responses should short: no longer than 2 or 3 sentences.  If necessary, include links to Web sites in your responses."
+    systemPrompt := getSystemPrompt()
 
     // Create the JSON request.
     requestBody, err := json.Marshal(map[string]interface{}{
         "model": "claude-sonnet-4-0",  // This is an alias for the latest Sonnet 4 version.
         "max_tokens": 1536,  // The maximum number of tokens the AI will generate.
         "system": systemPrompt,
+//      "thinking": {
+//          "type": "enabled",
+//          "budget_tokens": 10000  // Must be smaller than 'max_tokens' above.
+//      },
         "messages": []map[string]string{  // An array of maps.
             { "role": "user",
               "content": userMessage },
@@ -241,9 +258,14 @@ func generateResponse(userMessage string) string {
     //     "role": "assistant",
     //     "model": "claude-sonnet-4-20250514",
     //     "content": [
-    //         {
+    //         {   // Array element 0.  Only present when thinking is enabled.
+    //             "type": "thinking",
+    //             "thinking": "<THINKING TEXT HERE>...",
+    //             "signature": "WaUjzkypQ2mUEVM36O2TxuC06KN8xyfbJwyem2dw3UjavL...."
+    //         },
+    //         {   // Array element 1.
     //             "type": "text",
-    //             "text": "..."
+    //             "text": "<AI RESPONSE HERE>..."
     //         }
     //     ],
     //     "stop_reason": "end_turn",
