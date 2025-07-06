@@ -39,8 +39,8 @@ func main() {
         log.Fatalf("Error creating Discord session: %v", err)
     }
 
-    // Register the messageCreate func as a callback for MessageCreate events.
-    dg.AddHandler(messageCreate)
+    // Register the handleMessageCreateEvent func as a callback for MessageCreate events.
+    dg.AddHandler(handleMessageCreateEvent)
 
     // In this example, we only care about receiving message events.
     dg.Identify.Intents = discordgo.IntentsGuildMessages | discordgo.IntentsDirectMessages
@@ -64,19 +64,19 @@ func main() {
 
 // This function will be called (due to AddHandler) every time a new
 // message is created on any channel that the authenticated bot has access to.
-func messageCreate(session *discordgo.Session, m *discordgo.MessageCreate) {
+func handleMessageCreateEvent(session *discordgo.Session, messageCreateEvent *discordgo.MessageCreate) {
     // Ignore all messages created by the bot itself
-    if m.Author.ID == session.State.User.ID {
+    if messageCreateEvent.Author.ID == session.State.User.ID {
         return
     }
 
     // Ignore messages that don't start with the command prefix.
-    if !strings.HasPrefix(m.Content, "!") {
+    if !strings.HasPrefix(messageCreateEvent.Content, "!") {
         return
     }
 
     // Parse the command and arguments.
-    parts := strings.Fields(m.Content)
+    parts := strings.Fields(messageCreateEvent.Content)
 
     if len(parts) == 0 {
         return
@@ -100,7 +100,7 @@ My replies will be brief, because I'm using Fran's API key to access Claude, and
         // Replace all '^'s in helpMsg with '`'.
         helpMsg = strings.ReplaceAll(helpMsg, "^", "`")
 
-        session.ChannelMessageSend(m.ChannelID, helpMsg)
+        session.ChannelMessageSend(messageCreateEvent.ChannelID, helpMsg)
 
     case "!status":
         states := []string{"nominal", "behaving", "normal", "operational", "operating as expected", "crazy good",
@@ -110,19 +110,19 @@ My replies will be brief, because I'm using Fran's API key to access Claude, and
         uptime := time.Since(startTime)
 
         msg := fmt.Sprintf("All systems are %v.  I have been running for %v.", state, uptime.Round(time.Second))
-        session.ChannelMessageSend(m.ChannelID, msg)
+        session.ChannelMessageSend(messageCreateEvent.ChannelID, msg)
 
     default:
         // For all other uses of '!...' remove the leading '!' and send the rest to Claude to get a
         // reply.
 
-        // Remove the leading '!' from m.Content.
-        userMessage := strings.TrimPrefix(m.Content, "!")
+        // Remove the leading '!' from messageCreateEvent.Content.
+        userMessage := strings.TrimPrefix(messageCreateEvent.Content, "!")
 
         // Complain if userMessage is longer than 1500 characters.
         if len(userMessage) > 1500 {
             msg := "Sorry, I can't respond to messages that are longer than 1500 characters."
-            session.ChannelMessageSend(m.ChannelID, msg)
+            session.ChannelMessageSend(messageCreateEvent.ChannelID, msg)
             return
         }
 
@@ -132,13 +132,13 @@ My replies will be brief, because I'm using Fran's API key to access Claude, and
         if (!prevCommandTime.IsZero() && time.Since(prevCommandTime) < 30 * time.Second) {
             // There was a previous command and less than 5 seconds have passed since it was received.
             msg := "Arrghhh!  I'm overloaded.  Please wait 30 seconds before trying again."
-            session.ChannelMessageSend(m.ChannelID, msg)
+            session.ChannelMessageSend(messageCreateEvent.ChannelID, msg)
         } else {
             // Generate a response from the AI.
             aiResponse := generateResponse(userMessage)
 
             // Send the response text to the Discord server.
-            session.ChannelMessageSend(m.ChannelID, aiResponse)
+            session.ChannelMessageSend(messageCreateEvent.ChannelID, aiResponse)
         }
 
         prevCommandTime = thisCommandTime
