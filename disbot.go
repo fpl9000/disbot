@@ -322,3 +322,40 @@ func generateResponse(userMessage string) string {
     // Return the AI-generated response text.
     return text
 }
+
+// This function sends a message to an arbitrary channel.  Returns nil if successful, otherwise an
+// instance of type error.
+func sendMessageToChannel(session *discordgo.Session, channelName string, message string) error {
+    // Get all channels in the server.
+    channels, err := session.GuildChannels("840286104296489000")
+
+    if err != nil {
+        return fmt.Errorf("Error: Failed to get server channel list: %v", err)
+    }
+
+    // Find the channel ID from the channel name.
+    var targetChannelID string
+
+    for _, channel := range channels {
+        // Check if this is a text channel (not voice, category, etc.) and matches the specified name.
+        if channel.Type == discordgo.ChannelTypeGuildText && channel.Name == channelName {
+            targetChannelID = channel.ID
+            break
+        }
+    }
+
+    // Check if we found the channel
+    if targetChannelID == "" {
+        return fmt.Errorf("Error: Channel '%s' not found in guild", channelName)
+    }
+
+    // Send the message to the found channel
+    _, err = session.ChannelMessageSend(targetChannelID, message)
+
+    if err != nil {
+        return fmt.Errorf("Error: Failed to send message to channel: %v", err)
+    }
+
+    fmt.Printf("Message sent successfully to channel '%s'\n", channelName)
+    return nil
+}
