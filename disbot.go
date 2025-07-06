@@ -103,14 +103,48 @@ My replies will be brief, because I'm using Fran's API key to access Claude, and
         session.ChannelMessageSend(messageCreateEvent.ChannelID, helpMsg)
 
     case "!status":
-        states := []string{"nominal", "behaving", "normal", "operational", "operating as expected", "crazy good",
-                           "within reason", "pretty good, given the state of the world", "not too bad", "killing it",
-                           "grooving", "just peachy", "okey dokey", "fine, just fine", "... oh never mind"}
+        states := []string{"nominal", "behaving", "rocking it", "within reason", "pretty good", "not too bad",
+                           "killing it", "grooving", "just peachy", "okey dokey", "fine, just fine",
+                           "... oh never mind", "reasonable", "adequate", "plausible", "howling"}
         state := states[rand.Intn(len(states))]  // Get a random state string.
         uptime := time.Since(startTime)
 
         msg := fmt.Sprintf("All systems are %v.  I have been running for %v.", state, uptime.Round(time.Second))
         session.ChannelMessageSend(messageCreateEvent.ChannelID, msg)
+
+    case "!say":
+        if len(parts) < 3 {
+            msg := "Too few parameters.  Usage: `!say CHANNELNAME MESSAGE`"
+            session.ChannelMessageSend(messageCreateEvent.ChannelID, msg)
+            return
+        }
+
+        // Get the message to send by removing '!say ' from the start of the message.
+        message := strings.TrimPrefix(messageCreateEvent.Content, "!say ")
+
+        // Get the channel name, which is the first word in message.
+        channelName := strings.Fields(message)[0]
+
+        // Remove the channel name from message.
+        message = strings.TrimPrefix(message, channelName)
+
+        // Remove all leading and trailing whitespace from message.
+        message = strings.TrimSpace(message)
+
+        // Send the message to the specified channel.
+        err := sendMessageToChannel(session, channelName, message)
+
+        if err != nil {
+            // There was an error sending the message.  Send the error message to the channel where
+            // the command was issued.
+            msg := fmt.Sprintf("Error sending message to channel '%s': %v", channelName, err)
+            session.ChannelMessageSend(messageCreateEvent.ChannelID, msg)
+        } else {
+            // The message was sent successfully, so send a confirmation message.
+            msg := fmt.Sprintf("Message sent to channel '%s'.", channelName)
+            session.ChannelMessageSend(messageCreateEvent.ChannelID, msg)
+        }
+        return
 
     default:
         // For all other uses of '!...' remove the leading '!' and send the rest to Claude to get a
