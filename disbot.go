@@ -82,14 +82,14 @@ func handleMessageCreateEvent(session *discordgo.Session, messageCreateEvent *di
     }
 
     // Parse the command and arguments.
-    parts := strings.Fields(messageCreateEvent.Content)
+    messageParts := strings.Fields(messageCreateEvent.Content)
 
-    if len(parts) == 0 || len(messageCreateEvent.Content) == 0 {
+    if len(messageParts) == 0 || len(messageCreateEvent.Content) == 0 {
         // Ignore empty messages.
         return
     }
 
-    command := strings.ToLower(parts[0])
+    command := strings.ToLower(messageParts[0])
 
     switch command {
     case "!help":
@@ -100,7 +100,7 @@ func handleMessageCreateEvent(session *discordgo.Session, messageCreateEvent *di
 • ^!In 'The Lord of the Rings', who was Saruman?^
 • ^!What was George Orwell's real name?^
 
-You can also DM me, but you must use the ^!^ prefix even in DMs.  My replies will be brief, because I use Fran's API key to access Claude, and tokens cost money.  I don't know your Discord usernames.  All of you appear to me as a single user.  I also respond to these commands:
+You can also DM me, but you must use the ^!^ prefix even in DMsa.  My replies will be brief, because I use Fran's API key to access Claude, and tokens cost money.  I don't know your Discord usernames. All of you appear to me as a single user, and I have no memory of your previous messages to me (yet).  I also respond to these commands:
 
 ^!status^ - Shows my status and uptime.
 ^!help^   - Shows this help message.`
@@ -129,7 +129,7 @@ You can also DM me, but you must use the ^!^ prefix even in DMs.  My replies wil
             return
         }
 
-        if len(parts) < 3 {
+        if len(messageParts) < 3 {
             msg := "Too few parameters.  Usage: `!!say CHANNELNAME MESSAGE`"
             session.ChannelMessageSend(messageCreateEvent.ChannelID, msg)
             return
@@ -138,8 +138,8 @@ You can also DM me, but you must use the ^!^ prefix even in DMs.  My replies wil
         // Get the message to send by removing '!say ' from the start of the message.
         message := strings.TrimPrefix(messageCreateEvent.Content, "!say ")
 
-        // Get the channel name, which is the first word in message.
-        channelName := strings.Fields(message)[0]
+        // Get the channel name, which is the second word in the message.
+        channelName := messageParts[1]
 
         // Remove the channel name from message.
         message = strings.TrimPrefix(message, channelName)
