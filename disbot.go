@@ -100,7 +100,7 @@ func handleMessageCreateEvent(session *discordgo.Session, messageCreateEvent *di
 • ^!In 'The Lord of the Rings', who was Saruman?^
 • ^!What was George Orwell's real name?^
 
-You can also DM me, but you must use the ^!^ prefix even in DMsa.  My replies will be brief, because I use Fran's API key to access Claude, and tokens cost money.  I don't know your Discord usernames. All of you appear to me as a single user, and I have no memory of your previous messages to me (yet).  I also respond to these commands:
+You can also DM me, but you must use the ^!^ prefix even in DMs.  My replies will be brief, because I use Fran's API key to access Claude, and tokens cost money.  I don't know your Discord usernames. All of you appear to me as a single user, and I have no memory of your previous messages to me (yet).  I also respond to these commands:
 
 ^!status^ - Shows my status and uptime.
 ^!help^   - Shows this help message.`
