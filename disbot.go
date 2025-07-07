@@ -177,9 +177,9 @@ My replies will be brief, because I'm using Fran's API key to access Claude, and
         thisCommandTime := time.Now()
 
         // Do not allow users to message the bot too frequently.
-        rateLimitWindow := time.Duration(15)  // Units are seconds.
+        rateLimitWindow := 15 * time.Second
 
-        if (!prevCommandTime.IsZero() && time.Since(prevCommandTime) < rateLimitWindow * time.Second) {
+        if (!prevCommandTime.IsZero() && time.Since(prevCommandTime) < rateLimitWindow) {
             // Too little time has passed since the previous command to this bot.
             msg := fmt.Sprintf("Arrghhh!  I'm overloaded.  Please wait %v seconds.", rateLimitWindow)
             session.ChannelMessageSend(messageCreateEvent.ChannelID, msg)
