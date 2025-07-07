@@ -98,11 +98,12 @@ func handleMessageCreateEvent(session *discordgo.Session, messageCreateEvent *di
 
 • ^!What is the mass of Jupiter?^
 • ^!In 'The Lord of the Rings', who was Saruman?^
+• ^!What was George Orwell's real name?^
 
-You can also DM me, but you must still use the ^!^ prefix even in DMs.  My replies will be brief, because I use Fran's API key to access Claude, and tokens cost money.  I don't know your Discord usernames.  All of you appear to me as a single user.  I also respond to these commands:
+You can also DM me, but you must use the ^!^ prefix even in DMs.  My replies will be brief, because I use Fran's API key to access Claude, and tokens cost money.  I don't know your Discord usernames.  All of you appear to me as a single user.  I also respond to these commands:
 
-^!help^   - Shows this help message.
-^!status^ - Shows my status and uptime.`
+^!status^ - Shows my status and uptime.
+^!help^   - Shows this help message.`
 
         // Replace all '^'s in helpMsg with '`'.
         helpMsg = strings.ReplaceAll(helpMsg, "^", "`")
