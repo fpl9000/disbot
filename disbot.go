@@ -92,10 +92,10 @@ func handleMessageCreateEvent(session *discordgo.Session, messageCreateEvent *di
         // Must use '^' where we want a '`', due to Go's backtick quote syntax here.
         helpMsg := `I'm a bot written by Fran and powered by Claude.  Talk to me by starting your message with '^!^'. For example:
 
-^!What is the mass of Jupiter?^
-^!In 'The Lord of the Rings', who was Saruman?^
+• ^!What is the mass of Jupiter?^
+• ^!In 'The Lord of the Rings', who was Saruman?^
 
-My replies will be brief, because I'm using Fran's API key to access Claude, and tokens cost money.  I also respond to these commands:
+You can also DM me, but you must still use the `!` prefix even in DMs.  My replies will be brief, because I use Fran's API key to access Claude, and tokens cost money.  I don't know your Discord usernames.  All of you appear to me as a single user.  I also respond to these commands:
 
 ^!help^   - Shows this help message.
 ^!status^ - Shows my status and uptime.`
