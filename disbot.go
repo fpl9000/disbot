@@ -95,7 +95,7 @@ func handleMessageCreateEvent(session *discordgo.Session, messageCreateEvent *di
 • ^!What is the mass of Jupiter?^
 • ^!In 'The Lord of the Rings', who was Saruman?^
 
-You can also DM me, but you must still use the `!` prefix even in DMs.  My replies will be brief, because I use Fran's API key to access Claude, and tokens cost money.  I don't know your Discord usernames.  All of you appear to me as a single user.  I also respond to these commands:
+You can also DM me, but you must still use the ^!^ prefix even in DMs.  My replies will be brief, because I use Fran's API key to access Claude, and tokens cost money.  I don't know your Discord usernames.  All of you appear to me as a single user.  I also respond to these commands:
 
 ^!help^   - Shows this help message.
 ^!status^ - Shows my status and uptime.`
@@ -108,7 +108,8 @@ You can also DM me, but you must still use the `!` prefix even in DMs.  My repli
     case "!status":
         states := []string{"nominal", "behaving", "rocking it", "within reason", "pretty good", "not too bad",
                            "killing it", "grooving", "just peachy", "okey dokey", "fine, just fine",
-                           "... oh never mind", "reasonable", "adequate", "plausible", "howling"}
+                           "... oh never mind", "reasonable", "adequate", "plausible", "howling", "superintelligent",
+                           "having a good day", "groovy", "👍", "🚀", "😎"}
         state := states[rand.Intn(len(states))]  // Get a random state string.
         uptime := time.Since(startTime)
 
