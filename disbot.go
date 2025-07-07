@@ -150,6 +150,7 @@ You can also DM me, but you must use the ^!^ prefix even in DMs.  My replies wil
         // Send the message to the specified channel.
         err := sendMessageToChannel(session, channelName, message)
 
+        // Report status to the user to issued the '!!say ...' command.
         if err != nil {
             // There was an error sending the message.  Send the error message to the channel where
             // the command was issued.
@@ -412,6 +413,5 @@ func sendMessageToChannel(session *discordgo.Session, channelName string, messag
         return fmt.Errorf("Error: Failed to send message to channel: %v", err)
     }
 
-    fmt.Printf("Message sent successfully to channel '%s'\n", channelName)
     return nil
 }
