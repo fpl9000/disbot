@@ -70,6 +70,9 @@ func handleMessageCreateEvent(session *discordgo.Session, messageCreateEvent *di
         return
     }
 
+    // For debugging.
+    // fmt.Println("messageCreateEvent.Author.ID =", messageCreateEvent.Author.ID)
+
     // Ignore messages that don't start with the command prefix.
     if !strings.HasPrefix(messageCreateEvent.Content, "!") {
         return
@@ -112,9 +115,16 @@ My replies will be brief, because I'm using Fran's API key to access Claude, and
         msg := fmt.Sprintf("All systems are %v.  I have been running for %v.", state, uptime.Round(time.Second))
         session.ChannelMessageSend(messageCreateEvent.ChannelID, msg)
 
-    case "!say":
+    case "!!say":
+        if messageCreateEvent.Author.ID != "555030984706359296" {
+            // Only Fran can use the '!!say' command.
+            msg := "Sorry, only Fran can use the '!!say' command."
+            session.ChannelMessageSend(messageCreateEvent.ChannelID, msg)
+            return
+        }
+
         if len(parts) < 3 {
-            msg := "Too few parameters.  Usage: `!say CHANNELNAME MESSAGE`"
+            msg := "Too few parameters.  Usage: `!!say CHANNELNAME MESSAGE`"
             session.ChannelMessageSend(messageCreateEvent.ChannelID, msg)
             return
         }
