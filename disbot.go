@@ -163,9 +163,12 @@ My replies will be brief, because I'm using Fran's API key to access Claude, and
         // Remove the leading '!' from messageCreateEvent.Content.
         userMessage := strings.TrimPrefix(messageCreateEvent.Content, "!")
 
-        // Complain if userMessage is longer than 1500 characters.
-        if len(userMessage) > 1500 {
-            msg := "Sorry, I can't respond to messages that are longer than 1500 characters."
+        // Complain if userMessage is too long.
+        maxUserMessageChars := 1000
+
+        if len(userMessage) > maxUserMessageChars {
+            msg := fmt.Sprintf("Sorry, I can't respond to messages that are longer than %v characters.",
+                               maxUserMessageChars)
             session.ChannelMessageSend(messageCreateEvent.ChannelID, msg)
             return
         }
@@ -173,9 +176,12 @@ My replies will be brief, because I'm using Fran's API key to access Claude, and
         // Rmember the time of this command, so we can throttle replies if commands arrive to quickly.
         thisCommandTime := time.Now()
 
-        if (!prevCommandTime.IsZero() && time.Since(prevCommandTime) < 30 * time.Second) {
-            // There was a previous command and less than 5 seconds have passed since it was received.
-            msg := "Arrghhh!  I'm overloaded.  Please wait 30 seconds before trying again."
+        // Do not allow users to message the bot too frequently.
+        rateLimitWindow := time.Duration(15)  // Units are seconds.
+
+        if (!prevCommandTime.IsZero() && time.Since(prevCommandTime) < rateLimitWindow * time.Second) {
+            // Too little time has passed since the previous command to this bot.
+            msg := fmt.Sprintf("Arrghhh!  I'm overloaded.  Please wait %v seconds.", rateLimitWindow)
             session.ChannelMessageSend(messageCreateEvent.ChannelID, msg)
         } else {
             // Generate a response from the AI.
