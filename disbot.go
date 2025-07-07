@@ -94,7 +94,7 @@ func handleMessageCreateEvent(session *discordgo.Session, messageCreateEvent *di
     switch command {
     case "!help":
         // Must use '^' where we want a '`', due to Go's backtick quote syntax here.
-        helpMsg := `I'm a bot written by Fran and powered by Claude.  Talk to me by starting your message with '^!^'. For example:
+        helpMsg := `I'm a bot written by Fran, Gemini, and Claude and powered by Claude.  Talk to me by starting your message with '^!^'. For example:
 
 • ^!What is the mass of Jupiter?^
 • ^!In 'The Lord of the Rings', who was Saruman?^
