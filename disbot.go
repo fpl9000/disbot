@@ -73,6 +73,9 @@ func handleMessageCreateEvent(session *discordgo.Session, messageCreateEvent *di
     // For debugging.
     // fmt.Println("messageCreateEvent.Author.ID =", messageCreateEvent.Author.ID)
 
+    // Strip leading and trailing whitespace.
+    messageCreateEvent.Content = strings.TrimSpace(messageCreateEvent.Content)
+
     // Ignore messages that don't start with the command prefix.
     if !strings.HasPrefix(messageCreateEvent.Content, "!") {
         return
@@ -81,7 +84,8 @@ func handleMessageCreateEvent(session *discordgo.Session, messageCreateEvent *di
     // Parse the command and arguments.
     parts := strings.Fields(messageCreateEvent.Content)
 
-    if len(parts) == 0 {
+    if len(parts) == 0 || len(messageCreateEvent.Content) == 0 {
+        // Ignore empty messages.
         return
     }
 
