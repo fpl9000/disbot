@@ -248,7 +248,7 @@ func generateResponse(userMessage string) string {
         apiKey = os.Getenv("ANTHROPIC_API_KEY")
 
         if apiKey == "" {
-            msg := "Oops: Environment variable ANTHROPIC_API_KEY not set."
+            msg := "Error: Environment variable ANTHROPIC_API_KEY not set."
             fmt.Println(msg)
             return msg
         }
@@ -278,7 +278,7 @@ func generateResponse(userMessage string) string {
     })
 
     if err != nil {
-        msg := fmt.Sprintf("Oops: Error creating request body: %s", err)
+        msg := fmt.Sprintf("Error: Error creating request body: %s", err)
         fmt.Println(msg)
         return msg
     }
@@ -287,7 +287,7 @@ func generateResponse(userMessage string) string {
     req, err := http.NewRequest("POST", url, bytes.NewBuffer(requestBody))
 
     if err != nil {
-        msg := fmt.Sprintf("Oops: Error creating HTTP request: %s", err)
+        msg := fmt.Sprintf("Error: Error creating HTTP request: %s", err)
         fmt.Println(msg)
         return msg
     }
@@ -302,7 +302,7 @@ func generateResponse(userMessage string) string {
     resp, err := client.Do(req)
 
     if err != nil {
-        msg := fmt.Sprintf("Oops: Network communication error: %s", err)
+        msg := fmt.Sprintf("Error: Network communication error: %s", err)
         fmt.Println(msg)
         return msg
     }
@@ -312,7 +312,7 @@ func generateResponse(userMessage string) string {
 
     // Handle HTTP errors.
     if resp.StatusCode != http.StatusOK {
-        msg := fmt.Sprintf("Oops: HTTP error: %s", resp.Status)
+        msg := fmt.Sprintf("Error: HTTP error: %s", resp.Status)
         fmt.Println(msg)
         return msg
     }
@@ -330,7 +330,7 @@ func generateResponse(userMessage string) string {
     bytesRead, err := resp.Body.Read(jsonBytes)
 
     if err != nil {
-        msg := fmt.Sprintf("Oops: Error reading AI response: %s", err)
+        msg := fmt.Sprintf("Error: Error reading AI response: %s", err)
         fmt.Println(msg)
         return msg
     }
@@ -345,7 +345,7 @@ func generateResponse(userMessage string) string {
     err = json.Unmarshal(jsonBytes[:bytesRead], &response)
 
     if err != nil {
-        msg := fmt.Sprintf("Oops: Error unmarshalling AI response: %s", err)
+        msg := fmt.Sprintf("Error: Error unmarshalling AI response: %s", err)
         fmt.Println(msg)
         return msg
     }
@@ -354,7 +354,7 @@ func generateResponse(userMessage string) string {
     content, ok := response["content"].([]interface{})
 
     if !ok || len(content) == 0 {
-        msg := "Oops: AI response does not contain the expected JSON."
+        msg := "Error: AI response does not contain the expected JSON."
         fmt.Println(msg)
         return msg
     }
@@ -364,7 +364,7 @@ func generateResponse(userMessage string) string {
     text, ok := firstContent["text"].(string)
 
     if !ok {
-        msg := "Oops: AI response content does not contain text."
+        msg := "Error: AI response content does not contain text."
         fmt.Println(msg)
         return msg
     }
