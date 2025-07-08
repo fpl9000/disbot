@@ -229,7 +229,7 @@ func sendAIMessage(session *discordgo.Session, messageCreateEvent *discordgo.Mes
         session.ChannelMessageSend(messageCreateEvent.ChannelID, msg)
     } else {
         // Generate a response from the AI.
-        aiResponse := generateResponse(userMessage)
+        aiResponse := generateAIResponse(userMessage)
 
         // Send the response text to the Discord server.
         session.ChannelMessageSend(messageCreateEvent.ChannelID, aiResponse)
@@ -242,7 +242,7 @@ func sendAIMessage(session *discordgo.Session, messageCreateEvent *discordgo.Mes
 // This function obtains an AI-generated response to a user message received from Discord.  If
 // successful, it returns the AI-generated response, otherwise it returns a string describing the
 // nature of the error.
-func generateResponse(userMessage string) string {
+func generateAIResponse(userMessage string) string {
     // Get the AI API key.
     if apiKey == "" {
         apiKey = os.Getenv("ANTHROPIC_API_KEY")
@@ -254,12 +254,11 @@ func generateResponse(userMessage string) string {
         }
     }
 
-    // See https://docs.anthropic.com/en/api/overview for details.
-
-    // This is the API endpoint URL.
+    // This is the API endpoint URL.  See https://docs.anthropic.com/en/api/overview for details
+    // about the Claude API.
     url := "https://api.anthropic.com/v1/messages"
 
-    // This is the AI's system prompt.
+    // Get the AI's system prompt.
     systemPrompt := getSystemPrompt()
 
     // Create the JSON request.
@@ -297,7 +296,8 @@ func generateResponse(userMessage string) string {
     req.Header.Set("anthropic-version", "2023-06-01")
     req.Header.Set("Content-Type", "application/json")
 
-    // Send the HTTP request to the AI.
+    // Send the HTTP request to the AI and get the HTTP response.  The body of the response is JSON
+    // containing the AI's response to the user's message.
     client := &http.Client{}
     resp, err := client.Do(req)
 
@@ -321,28 +321,55 @@ func generateResponse(userMessage string) string {
     contentLength := resp.ContentLength
 
     if contentLength <= 0 {
+        // Sometimes the Content-Length header is -1.
         contentLength = 50 * 1024   // 50 kb should be enough.
     }
 
     // Get the text of the body of the response.
     jsonBytes := make([]byte, contentLength)
+    jsonBytesCount := 0
 
-    bytesRead, err := resp.Body.Read(jsonBytes)
+    // Each call to resp.Body.Read will fill this slice of jsonBytes with the next group of bytes,
+    // then this slice will be advanced along slice jsonBytes to be ready for the next call to Read.
+    jsonBytesForReading := jsonBytes[:contentLength] 
 
-    if err != nil {
-        msg := fmt.Sprintf("Error: Error reading AI response: %s", err)
-        fmt.Println(msg)
-        return msg
+    // Read the entire response body by calling resp.Body.Read() in a loop until bytesRead == 0 or
+    // err != nil.
+    for {
+        bytesRead, err := resp.Body.Read(jsonBytesForReading)
+
+        if bytesRead == 0 && err.Error() != "EOF" {
+            fmt.Printf("WARNING: bytesRead == 0: err == %v\n", err)
+        }
+
+        // Count the bytes we just read.
+        jsonBytesCount += bytesRead
+
+        if err != nil {
+            // If we get an EOF error reading the body, break out of the loop.  This is the normal
+            // way we know that we have read the entire response body.
+            if err.Error() == "EOF" {
+                break
+            }
+
+            // All other errors are unexpected.
+            msg := fmt.Sprintf("Error: Error reading AI response body: %s", err)
+            fmt.Println(msg)
+            return msg
+        }
+
+        // Advance slice jsonBytesForReading to one byte past the bytes read so far.
+        jsonBytesForReading = jsonBytes[bytesRead:]
     }
 
     // For debugging.
-    // fmt.Println("Got JSON:", string(jsonBytes[:bytesRead]))
+    // fmt.Println("Got JSON:", string(jsonBytes[:jsonBytesCount]))
 
     var response map[string]interface{}
 
-    // Unmarshal the JSON.  Must use jsonBytes[:bytesRead] to avoid reading beyond the end of the
-    // data in the slice (see above make([]byte, ...)).
-    err = json.Unmarshal(jsonBytes[:bytesRead], &response)
+    // Unmarshal the JSON into object 'response'.  Must use jsonBytes[:jsonBytesCount] to avoid reading
+    // beyond the end of the data in slice jsonBytes.
+    err = json.Unmarshal(jsonBytes[:jsonBytesCount], &response)
 
     if err != nil {
         msg := fmt.Sprintf("Error: Error unmarshalling AI response: %s", err)
