@@ -51,7 +51,7 @@ func main() {
         log.Fatalf("Error opening connection: %v", err)
     }
 
-    fmt.Println("Bot is now running. Press CTRL-C to exit.")
+    fmt.Println("Bot is running.  Press Ctrl-C to exit.")
 
     // Wait here until CTRL-C or other term signal is received.
     sc := make(chan os.Signal, 1)
@@ -94,13 +94,13 @@ func handleMessageCreateEvent(session *discordgo.Session, messageCreateEvent *di
     switch command {
     case "!help":
         // Must use '^' where we want a '`', due to Go's backtick quote syntax here.
-        helpMsg := `I'm a bot written by Fran, Gemini, and Claude and powered by Claude.  Talk to me by starting your message with '^!^'. For example:
+        helpMsg := `I'm a bot written by Fran, Gemini, and Claude and powered by Claude. Talk to me by starting your message with '^!^'. For example:
 
 • ^!What is the mass of Jupiter?^
 • ^!In 'The Lord of the Rings', who was Saruman?^
 • ^!What was George Orwell's real name?^
 
-You can also DM me, but you must use the ^!^ prefix even in DMs.  My replies will be brief, because I use Fran's API key to access Claude, and tokens cost money.  I don't know your Discord usernames. All of you appear to me as a single user, and I have no memory of your previous messages to me (yet).  I also respond to these commands:
+You can also DM me, but you must use the ^!^ prefix even in DMs. My replies will be brief, because I use Fran's API key to access Claude, and tokens cost money. I don't know your Discord usernames. All of you appear to me as a single user. I have no memory of your previous messages to me (yet). I also respond to these commands:
 
 ^!status^ - Shows my status and uptime.
 ^!help^   - Shows this help message.`
@@ -122,8 +122,8 @@ You can also DM me, but you must use the ^!^ prefix even in DMs.  My replies wil
         session.ChannelMessageSend(messageCreateEvent.ChannelID, msg)
 
     case "!!say":
+        // Only Fran can use the '!!say' command.
         if messageCreateEvent.Author.ID != "555030984706359296" {
-            // Only Fran can use the '!!say' command.
             msg := "Sorry, only Fran can use the '!!say' command."
             session.ChannelMessageSend(messageCreateEvent.ChannelID, msg)
             return
@@ -148,14 +148,13 @@ You can also DM me, but you must use the ^!^ prefix even in DMs.  My replies wil
         message = strings.TrimSpace(message)
 
         // Send the message to the specified channel.
-        err := sendMessageToChannel(session, channelName, message)
+        errMsg := sendMessageToChannel(session, channelName, message)
 
         // Report status to the user to issued the '!!say ...' command.
-        if err != nil {
+        if errMsg != "" {
             // There was an error sending the message.  Send the error message to the channel where
             // the command was issued.
-            msg := fmt.Sprintf("Error sending message to channel '%s': %v", channelName, err)
-            session.ChannelMessageSend(messageCreateEvent.ChannelID, msg)
+            session.ChannelMessageSend(messageCreateEvent.ChannelID, errMsg)
         } else {
             // The message was sent successfully, so send a confirmation message.
             msg := fmt.Sprintf("Message sent to channel '%s'.", channelName)
@@ -185,10 +184,13 @@ You can also DM me, but you must use the ^!^ prefix even in DMs.  My replies wil
 
         // Do not allow users to message the bot too frequently.
         rateLimitWindow := 15 * time.Second
+        timeSinceLastCommand := time.Since(prevCommandTime)
+        timeUntilCommandsAllowed := rateLimitWindow - timeSinceLastCommand + 1
 
-        if (!prevCommandTime.IsZero() && time.Since(prevCommandTime) < rateLimitWindow) {
+        if (!prevCommandTime.IsZero() && timeSinceLastCommand < rateLimitWindow) {
             // Too little time has passed since the previous command to this bot.
-            msg := fmt.Sprintf("Arrghhh!  I'm overloaded.  Please wait %v seconds.", rateLimitWindow)
+            msg := fmt.Sprintf("Arrghhh! I'm overloaded. Please wait %v seconds before talking to me.",
+                               timeUntilCommandsAllowed)
             session.ChannelMessageSend(messageCreateEvent.ChannelID, msg)
         } else {
             // Generate a response from the AI.
@@ -313,35 +315,6 @@ func generateResponse(userMessage string) string {
     // For debugging.
     // fmt.Println("Got JSON:", string(jsonBytes[:bytesRead]))
 
-    // Unmarshal the JSON in the response.  The JSON in the response has this form:
-    //
-    // {
-    //     "id": "msg_01FLtpFj1qRsnPKs5UygTinR",
-    //     "type": "message",
-    //     "role": "assistant",
-    //     "model": "claude-sonnet-4-20250514",
-    //     "content": [
-    //         {   // Array element 0.  Only present when thinking is enabled.
-    //             "type": "thinking",
-    //             "thinking": "<THINKING TEXT HERE>...",
-    //             "signature": "WaUjzkypQ2mUEVM36O2TxuC06KN8xyfbJwyem2dw3UjavL...."
-    //         },
-    //         {   // Array element 1.
-    //             "type": "text",
-    //             "text": "<AI RESPONSE HERE>..."
-    //         }
-    //     ],
-    //     "stop_reason": "end_turn",
-    //     "stop_sequence": null,
-    //     "usage": {
-    //         "input_tokens": 23,
-    //         "cache_creation_input_tokens": 0,
-    //         "cache_read_input_tokens": 0,
-    //         "output_tokens": 127,
-    //         "service_tier": "standard"
-    //     }
-    // }
-
     var response map[string]interface{}
 
     // Unmarshal the JSON.  Must use jsonBytes[:bytesRead] to avoid reading beyond the end of the
@@ -380,14 +353,14 @@ func generateResponse(userMessage string) string {
     return text
 }
 
-// This function sends a message to an arbitrary channel.  Returns nil if successful, otherwise an
-// instance of type error.
-func sendMessageToChannel(session *discordgo.Session, channelName string, message string) error {
+// This function sends a message to an arbitrary channel.  Returns the empty string if successful,
+// otherwise returns an error message string.
+func sendMessageToChannel(session *discordgo.Session, channelName string, message string) string {
     // Get all channels in the server.
     channels, err := session.GuildChannels("840286104296489000")
 
     if err != nil {
-        return fmt.Errorf("Error: Failed to get server channel list: %v", err)
+        return fmt.Sprintf("Error: Failed to get server channel list: %v", err)
     }
 
     // Find the channel ID from the channel name.
@@ -403,15 +376,16 @@ func sendMessageToChannel(session *discordgo.Session, channelName string, messag
 
     // Check if we found the channel
     if targetChannelID == "" {
-        return fmt.Errorf("Error: Channel '%s' not found in guild", channelName)
+        return fmt.Sprintf("Error: Channel '%s' not found!", channelName)
     }
 
     // Send the message to the found channel
     _, err = session.ChannelMessageSend(targetChannelID, message)
 
     if err != nil {
-        return fmt.Errorf("Error: Failed to send message to channel: %v", err)
+        return fmt.Sprintf("Error: Failed to send message to channel: %v", err)
     }
 
-    return nil
+    // Return the empty string on success.
+    return ""
 }
