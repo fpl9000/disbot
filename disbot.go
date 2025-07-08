@@ -76,50 +76,27 @@ func handleMessageCreateEvent(session *discordgo.Session, messageCreateEvent *di
     // Strip leading and trailing whitespace.
     messageCreateEvent.Content = strings.TrimSpace(messageCreateEvent.Content)
 
+    // Ignore empty messages.
+    if len(messageCreateEvent.Content) == 0 {
+        return
+    }
+
     // Ignore messages that don't start with the command prefix.
     if !strings.HasPrefix(messageCreateEvent.Content, "!") {
         return
     }
 
-    // Parse the command and arguments.
+    // Break the message string into words and extract the command word.
     messageParts := strings.Fields(messageCreateEvent.Content)
-
-    if len(messageParts) == 0 || len(messageCreateEvent.Content) == 0 {
-        // Ignore empty messages.
-        return
-    }
-
     command := strings.ToLower(messageParts[0])
 
     switch command {
     case "!help":
-        // Must use '^' where we want a '`', due to Go's backtick quote syntax here.
-        helpMsg := `I'm a bot written by Fran, Gemini, and Claude and powered by Claude. Talk to me by starting your message with '^!^'. For example:
-
-• ^!What is the mass of Jupiter?^
-• ^!In 'The Lord of the Rings', who was Saruman?^
-• ^!What was George Orwell's real name?^
-
-You can also DM me, but you must use the ^!^ prefix even in DMs. My replies will be brief, because I use Fran's API key to access Claude, and tokens cost money. I don't know your Discord usernames. All of you appear to me as a single user. I have no memory of your previous messages to me (yet). I also respond to these commands:
-
-^!status^ - Shows my status and uptime.
-^!help^   - Shows this help message.`
-
-        // Replace all '^'s in helpMsg with '`'.
-        helpMsg = strings.ReplaceAll(helpMsg, "^", "`")
-
-        session.ChannelMessageSend(messageCreateEvent.ChannelID, helpMsg)
+        // Display the help message.
+        sendHelpMessage(session, messageCreateEvent)
 
     case "!status":
-        states := []string{"nominal", "behaving", "rocking it", "within reason", "pretty good", "not too bad",
-                           "killing it", "grooving", "just peachy", "okey dokey", "fine, just fine",
-                           "... oh never mind", "reasonable", "adequate", "plausible", "howling", "superintelligent",
-                           "having a good day", "groovy", "👍", "🚀", "😎"}
-        state := states[rand.Intn(len(states))]  // Get a random state string.
-        uptime := time.Since(startTime)
-
-        msg := fmt.Sprintf("All systems are %v.  I have been running for %v.", state, uptime.Round(time.Second))
-        session.ChannelMessageSend(messageCreateEvent.ChannelID, msg)
+        sendStatusMessage(session, messageCreateEvent)
 
     case "!!say":
         // Only Fran can use the '!!say' command.
@@ -202,6 +179,39 @@ You can also DM me, but you must use the ^!^ prefix even in DMs. My replies will
 
         prevCommandTime = thisCommandTime
     }
+}
+
+// This function sends the help message to the channel/DM where messageCreateEvent came from.
+func sendHelpMessage(session *discordgo.Session, messageCreateEvent *discordgo.MessageCreate) {
+    // Must use '^' where we want a '`', due to Go's backtick quote syntax here.
+    helpMsg := `I'm a bot written by Fran, Gemini, and Claude and powered by Claude. Talk to me by starting your message with '^!^'. For example:
+
+• ^!What is the mass of Jupiter?^
+• ^!In 'The Lord of the Rings', who was Saruman?^
+• ^!What was George Orwell's real name?^
+
+You can also DM me, but you must use the '^!^' prefix even in DMs. My replies will be brief, because I use Fran's API key to access Claude, and tokens cost money. I don't know your Discord usernames. All of you appear to me as a single user. I have no memory of your previous messages to me (yet). I also respond to these commands:
+
+^!status^ - Shows my status and uptime.
+^!help^   - Shows this help message.`
+
+    // Replace all '^'s in helpMsg with '`'.
+    helpMsg = strings.ReplaceAll(helpMsg, "^", "`")
+
+    session.ChannelMessageSend(messageCreateEvent.ChannelID, helpMsg)
+}
+
+// This function sends a status message to the channel/DM where messageCreateEvent came from.
+func sendStatusMessage(session *discordgo.Session, messageCreateEvent *discordgo.MessageCreate) {
+    states := []string{"nominal", "behaving", "rocking it", "within reason", "pretty good", "not too bad",
+        "killing it", "grooving", "just peachy", "okey dokey", "fine, just fine",
+        "... oh never mind", "reasonable", "adequate", "plausible", "howling", "superintelligent",
+        "having a good day", "groovy", "👍", "🚀", "😎"}
+    state := states[rand.Intn(len(states))]  // Get a random state string.
+    uptime := time.Since(startTime)
+
+    msg := fmt.Sprintf("All systems are %v.  I have been running for %v.", state, uptime.Round(time.Second))
+    session.ChannelMessageSend(messageCreateEvent.ChannelID, msg)
 }
 
 // This function returns the system prompt to be sent in each JSON request to the AI.
