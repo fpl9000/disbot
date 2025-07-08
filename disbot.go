@@ -163,7 +163,7 @@ func sendHelpMessage(session *discordgo.Session, messageCreateEvent *discordgo.M
 • ^!What was the title of the Grateful Dead's second studio album?^
 • ^!What was George Orwell's real name?^
 
-You can also DM me, but you must use the '^!^' prefix even in DMs. My replies will be brief, because I use Fran's API key to access Claude, and tokens cost money. I don't know your Discord usernames. All of you appear to me as a single user. I have no memory of your previous messages to me (yet). I also respond to these commands:
+You can also DM me, but you must use the '^!^' prefix even in DMs. My replies will be brief, because tokens cost money. I don't know your Discord usernames. All of you appear to me as a single user. I have no memory of your previous messages to me (yet). I cannot (yet) search the Web. I also respond to these commands:
 
 ^!status^ - Shows my status and uptime.
 ^!help^   - Shows this help message.`
