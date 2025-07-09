@@ -156,20 +156,17 @@ func handleMessageCreateEvent(session *discordgo.Session, messageCreateEvent *di
 
 // This function sends the help message to the channel/DM where messageCreateEvent came from.
 func sendHelpMessage(session *discordgo.Session, messageCreateEvent *discordgo.MessageCreate) {
-    // Must use '^' where we want a '`', due to Go's backtick quote syntax here.
-    helpMsg := `I'm a bot written by Fran, Gemini, and Claude and powered by Claude. Talk to me by starting your message with '^!^'. For example:
-
-• ^!What is the mass of Jupiter?^
-• ^!What was the title of the Grateful Dead's second studio album?^
-• ^!What was George Orwell's real name?^
-
-You can also DM me, but you must use the '^!^' prefix even in DMs. My replies will be brief, because tokens cost money. I don't know your Discord usernames. All of you appear to me as a single user. I have no memory of your previous messages to me (yet). I cannot (yet) search the Web. I also respond to these commands:
-
-^!status^ - Shows my status and uptime.
-^!help^   - Shows this help message.`
-
-    // Replace all '^'s in helpMsg with '`'.
-    helpMsg = strings.ReplaceAll(helpMsg, "^", "`")
+    helpMsg := "I'm a bot written in Go by Fran, Gemini, and Claude and powered by Claude. Talk to me " +
+               "by starting your message with '`!`'. For example:\n\n" +
+               "• `!What is the mass of Jupiter?`\n" +
+               "• `!What was the title of the Grateful Dead's second studio album?`\n" +
+               "• `!What was George Orwell's real name?`\n\n" +
+               "You can also DM me, but you must use the '`!`' prefix even in DMs. My replies will " +
+               "be brief, because tokens cost money. I don't know your Discord usernames. All of you " +
+               "appear to me as a single user. I have no memory of your previous messages to me (yet). " +
+               "I cannot (yet) search the Web. I also respond to these commands:\n\n" +
+               "• `!status` - Shows my status and uptime.\n" +
+               "• `!help`   - Shows this help message."
 
     session.ChannelMessageSend(messageCreateEvent.ChannelID, helpMsg)
 }
