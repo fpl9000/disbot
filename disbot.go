@@ -83,13 +83,8 @@ func handleMessageCreateEvent(session *discordgo.Session, messageCreateEvent *di
     // Strip leading and trailing whitespace.
     messageCreateEvent.Content = strings.TrimSpace(messageCreateEvent.Content)
 
-    // Ignore empty messages.
-    if len(messageCreateEvent.Content) == 0 {
-        return
-    }
-
-    // Ignore messages that don't start with the command prefix.
-    if !strings.HasPrefix(messageCreateEvent.Content, "!") {
+    // Ignore empty messages and messages that don't start with the command prefix.
+    if len(messageCreateEvent.Content) == 0 || !strings.HasPrefix(messageCreateEvent.Content, "!") {
         return
     }
 
@@ -107,50 +102,13 @@ func handleMessageCreateEvent(session *discordgo.Session, messageCreateEvent *di
         sendStatusMessage(session, messageCreateEvent)
 
     case "!!say":
-        // Only Fran can use the '!!say' command.
-        if messageCreateEvent.Author.ID != "555030984706359296" {
-            msg := "Sorry, only Fran can use the '!!say' command."
-            session.ChannelMessageSend(messageCreateEvent.ChannelID, msg)
-            return
-        }
-
-        if len(messageParts) < 3 {
-            msg := "Too few parameters.  Usage: `!!say CHANNELNAME MESSAGE`"
-            session.ChannelMessageSend(messageCreateEvent.ChannelID, msg)
-            return
-        }
-
-        // Get the message to send by removing '!say ' from the start of the message.
-        message := strings.TrimPrefix(messageCreateEvent.Content, "!say ")
-
-        // Get the channel name, which is the second word in the message.
-        channelName := messageParts[1]
-
-        // Remove the channel name from message.
-        message = strings.TrimPrefix(message, channelName)
-
-        // Remove all leading and trailing whitespace from message.
-        message = strings.TrimSpace(message)
-
-        // Send the message to the specified channel.
-        errMsg := sendMessageToChannel(session, channelName, message)
-
-        // Report status to the user to issued the '!!say ...' command.
-        if errMsg != "" {
-            // There was an error sending the message.  Send the error message to the channel where
-            // the command was issued.
-            session.ChannelMessageSend(messageCreateEvent.ChannelID, errMsg)
-        } else {
-            // The message was sent successfully, so send a confirmation message.
-            msg := fmt.Sprintf("Message sent to channel '%s'.", channelName)
-            session.ChannelMessageSend(messageCreateEvent.ChannelID, msg)
-        }
-        return
+        // Process the '!!say ...' command.
+        handleSayCommand(session, messageCreateEvent, messageParts)
 
     default:
         // For all other uses of '!...', send the message to the AI to generate a reply and then
         // send it to the channel/DM .
-        sendAIMessage(session, messageCreateEvent)
+        sendAIGeneratedResponse(session, messageCreateEvent)
     }
 }
 
@@ -184,6 +142,46 @@ func sendStatusMessage(session *discordgo.Session, messageCreateEvent *discordgo
     session.ChannelMessageSend(messageCreateEvent.ChannelID, msg)
 }
 
+// This function handles the '!!say CHANNEL MESSAGE' command.
+func handleSayCommand(session *discordgo.Session, messageCreateEvent *discordgo.MessageCreate,
+                      messageParts []string) {
+    // Only Fran can use the '!!say' command.
+    if messageCreateEvent.Author.ID != "555030984706359296" {
+        msg := "Sorry, only Fran can use the '!!say' command."
+        session.ChannelMessageSend(messageCreateEvent.ChannelID, msg)
+        return
+    }
+
+    if len(messageParts) < 3 {
+        msg := "Too few parameters.  Usage: `!!say CHANNELNAME MESSAGE`"
+        session.ChannelMessageSend(messageCreateEvent.ChannelID, msg)
+        return
+    }
+
+    // Get the message to send by removing '!say ' from the start of the message.
+    message := strings.TrimPrefix(messageCreateEvent.Content, "!say ")
+
+    // Get the channel name, which is the second word in the message.
+    channelName := messageParts[1]
+
+    // Remove the channel name and leading/trailing whitespace from message.
+    message = strings.TrimSpace(strings.TrimPrefix(message, channelName))
+
+    // Send the message to the specified channel.
+    errMsg := sendMessageToChannel(session, channelName, message)
+
+    // Report status to the user to issued the '!!say ...' command.
+    if errMsg != "" {
+        // There was an error sending the message.  Send the error message to the channel where
+        // the command was issued.
+        session.ChannelMessageSend(messageCreateEvent.ChannelID, errMsg)
+    } else {
+        // The message was sent successfully, so send a confirmation message.
+        msg := fmt.Sprintf("Message sent to channel '%s'.", channelName)
+        session.ChannelMessageSend(messageCreateEvent.ChannelID, msg)
+    }
+}
+
 // This function returns the system prompt to be sent in each JSON request to the AI.
 func getSystemPrompt() string {
     todaysDate := time.Now().Format(time.DateOnly)
@@ -196,7 +194,7 @@ func getSystemPrompt() string {
 }
 
 // This function sends a message generated by the AI backend in response to the user's message.
-func sendAIMessage(session *discordgo.Session, messageCreateEvent *discordgo.MessageCreate) {
+func sendAIGeneratedResponse(session *discordgo.Session, messageCreateEvent *discordgo.MessageCreate) {
     // Remove the leading '!' from messageCreateEvent.Content.
     userMessage := strings.TrimPrefix(messageCreateEvent.Content, "!")
 
