@@ -193,7 +193,8 @@ func getSystemPrompt() string {
 
     sysPrompt := fmt.Sprintf("Today's date is %s.  You are a helpful assistant that provides concise and accurate " +
         "answers to user queries.  Your responses should be short: only 2 or 3 sentences.  Your user is one of a " +
-        "set of people connected to a Discord server (as are you), but you cannot distinguish one user from another.",
+        "set of people connected to a Discord server (as are you), but you cannot distinguish one user from another." +
+        "The text you generate should use Discord markdown so that it renders correctly.",
         todaysDate)
 
     return sysPrompt
