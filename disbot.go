@@ -378,29 +378,50 @@ func generateAIResponse(userMessage string) string {
     }
 
     // Check if the response contains content.
-    content, ok := response["content"].([]interface{})
+    contentSlice, ok := response["content"].([]interface{})
 
-    if !ok || len(content) == 0 {
-        msg := "Error: AI response does not contain the expected JSON."
+    if !ok || len(contentSlice) == 0 {
+        msg := "Error: Failed to find expected JSON (#0)."
         fmt.Println(msg)
         return msg
     }
 
-    // Extract the text from the first content item.
-    firstContent := content[0].(map[string]interface{})
-    text, ok := firstContent["text"].(string)
+    // This will hold the text returned by the AI.
+    aiText := ""
 
-    if !ok {
-        msg := "Error: AI response content does not contain text."
-        fmt.Println(msg)
-        return msg
+    // Iterate over all elements of contentSlice and concatenate the text.
+    for index := 0; index < len(contentSlice); index++ {
+        // Extract the map from the first contentSlice element.
+        contentElement, ok := contentSlice[index].(map[string]interface{})
+
+        if !ok {
+            msg := "Error: Failed to find expected JSON (#1)."
+            fmt.Println(msg)
+            return msg
+        }
+
+        // If the value of key "type" in the map is not "text", skip this element of contentSlice.
+        if contentElement["type"] != "text" {
+            continue
+        }
+
+        // Extract the value associated with key "text".  Some elements do not have 
+        elementText, ok := contentElement["text"].(string)
+
+        if !ok {
+            msg := "Error: Failed to find expected JSON (#2)."
+            fmt.Println(msg)
+            return msg
+        }
+
+        aiText += elementText
+
+        // For debugging.
+        // fmt.Printf("%v: aiText = '%s'\n", index, aiText)
     }
-
-    // For debugging.
-    // fmt.Printf("AI response: %s\n", text)
 
     // Return the AI-generated response text.
-    return text
+    return aiText
 }
 
 // This function sends a message to an arbitrary channel.  Returns the empty string if successful,
