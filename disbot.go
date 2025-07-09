@@ -21,8 +21,11 @@ var (
     // The base name of this executeable (e.g., 'disbot').
     Me = filepath.Base(os.Args[0])
 
-    // My Claude API key.  This will be set from an environment variable.
+    // My Claude API key.  This is set from an environment variable.
     apiKey = ""
+
+    // The bot's Discord authentication token.  This is set from an environment variable.
+    botToken = ""
 
     // The time this bot started.  used in status messages.
     startTime = time.Now()
@@ -31,15 +34,26 @@ var (
     prevMessageTime time.Time
 )
 
-func main() {
-    // Get the bot's auth token from the environment variable.
-    botToken := os.Getenv("DISCORD_BOT_TOKEN")
+// Package initialization.
+func init() {
+    // Get the AI API key from an environment variable.
+    apiKey = os.Getenv("ANTHROPIC_API_KEY")
+
+    if apiKey == "" {
+        fmt.Println("Error: Environment variable ANTHROPIC_API_KEY not set.")
+        os.Exit(1)
+    }
+
+    // Get the bot's authentication token from an environment variable.
+    botToken = os.Getenv("DISCORD_BOT_TOKEN")
 
     if botToken == "" {
         fmt.Printf("%s: Environment variable DISCORD_BOT_TOKEN is not set!\n", Me)
         os.Exit(1)
     }
+}
 
+func main() {
     // Create a new Discord session using the bot token.
     dg, err := discordgo.New("Bot " + botToken)
     if err != nil {
@@ -237,17 +251,6 @@ func sendAIGeneratedResponse(session *discordgo.Session, messageCreateEvent *dis
 // successful, it returns the AI-generated response, otherwise it returns a string describing the
 // nature of the error.
 func generateAIResponse(userMessage string) string {
-    // Get the AI API key.
-    if apiKey == "" {
-        apiKey = os.Getenv("ANTHROPIC_API_KEY")
-
-        if apiKey == "" {
-            msg := "Error: Environment variable ANTHROPIC_API_KEY not set."
-            fmt.Println(msg)
-            return msg
-        }
-    }
-
     // This is the API endpoint URL.  See https://docs.anthropic.com/en/api/overview for details
     // about the Claude API.
     url := "https://api.anthropic.com/v1/messages"
