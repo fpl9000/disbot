@@ -19,7 +19,7 @@ import (
 // Package scope variables.
 var (
     // The base name of this executeable (e.g., 'disbot').
-    Me = filepath.Base(os.Args[0])
+    Me = strings.TrimSuffix(filepath.Base(os.Args[0]), ".exe")
 
     // The AI's API key.  This is set from an environment variable.
     apiKey = ""
@@ -32,6 +32,12 @@ var (
 
     // The time of the last message received from a Discord user.  Used to throttle responses.
     prevMessageTime time.Time
+
+    // This is true if Web search is enable in the query to the AI.
+    webSearchEnabled = false
+
+    // This is true if reasoning is enabled in the query to the AI.
+    reasoningEnabled = false
 )
 
 // Package initialization.
@@ -54,6 +60,10 @@ func init() {
 }
 
 func main() {
+    // Parse the command-line switches.  This will set various package-scope variables based on the
+    // command-line switches (or show usage and terminate in the case of erroneous usage).
+    parseCommandLine()
+
     // Create a new Discord session using the bot token.
     dg, err := discordgo.New("Bot " + botToken)
     if err != nil {
@@ -63,7 +73,8 @@ func main() {
     // Register the handleMessageCreateEvent func as a callback for MessageCreate events.
     dg.AddHandler(handleMessageCreateEvent)
 
-    // In this example, we only care about receiving message events.
+    // In this example, we only care about receiving message events from channels (aka guilds) and
+    // from DMs.
     dg.Identify.Intents = discordgo.IntentsGuildMessages | discordgo.IntentsDirectMessages
 
     // Open a websocket connection to Discord and begin listening.
@@ -81,6 +92,48 @@ func main() {
 
     // Cleanly close down the Discord session.
     dg.Close()
+}
+
+// This function parses the command-line arguments and sets various package-scope variables based on
+// those switches.  If the command-line arguments are invalid, it shows usage and exits the program.
+func parseCommandLine() {
+    if len(os.Args) > 3 {
+        fmt.Println("Too many parameters!\n")
+        usage()
+    }
+
+    // Check for command-line switches.
+    for i := 1; i < len(os.Args); i++ {
+        argument := os.Args[i]
+
+        switch argument {
+        case "--search":
+            // Enable Web searching in the AI.
+            webSearchEnabled = true
+
+        case "--think":
+            // Enable reasoning in the AI.
+            reasoningEnabled = true
+
+        case "--help", "-h":
+            // Show usage and exit.
+            usage()
+
+        default:
+            fmt.Printf("%v: Unrecognized switch: '%v'!\n\n", Me, argument)
+            usage()
+        }
+    }
+}
+
+// Display usage and terminate.
+func usage() {
+    msg := "usage: " + Me + " [ --search ] [ --think ]\n\n" +
+           "--search  =>  Enable Web searching in the AI.\n" +
+           "--think   =>  Enable reasoning in the AI."
+
+    fmt.Println(msg)
+    os.Exit(1)
 }
 
 // This function will be called (due to AddHandler) every time a new message is send on any
