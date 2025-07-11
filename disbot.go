@@ -296,7 +296,7 @@ func getAIResponse(userMessage string, useWebSearch bool, useThinking bool) stri
     // Send the HTTP request to the AI and get the HTTP response.  The body of the response is JSON
     // containing the AI's response to the user's message.
     client := &http.Client{}
-    resp, err := client.Do(req)
+    httpResponse, err := client.Do(req)
 
     if err != nil {
         msg := fmt.Sprintf("Error: Network communication error: %s", err)
@@ -305,52 +305,54 @@ func getAIResponse(userMessage string, useWebSearch bool, useThinking bool) stri
     }
 
     // Close the HTTP connection at this function's return.
-    defer resp.Body.Close()
+    defer httpResponse.Body.Close()
 
     // Handle HTTP errors.
-    if resp.StatusCode != http.StatusOK {
-        msg := fmt.Sprintf("Error: HTTP error: %s", resp.Status)
+    if httpResponse.StatusCode != http.StatusOK {
+        msg := fmt.Sprintf("Error: HTTP error: %s", httpResponse.Status)
         fmt.Println(msg)
         return msg
     }
 
-    // TODO: Refactor the below code into its own function.
+    // Parse the HTTP response from the AI and return the text of the response.
+    return parseAIResponse(httpResponse)
+}
 
-    // =============================================================================
-    // UNDER CONSTRUCTION
-    // =============================================================================
-
-    // Get the 'Content-Length' header.
-    contentLength := resp.ContentLength
+// This function processes the HTTP response from the AI and returns the AI-generated response text.
+func parseAIResponse(httpResponse *http.Response) string {
+    // Get the 'Content-Length' header so we know how big to make the byte slice that will hold
+    // the response body.
+    contentLength := httpResponse.ContentLength
 
     if contentLength <= 0 {
-        // Sometimes the Content-Length header is -1.
-        contentLength = 50 * 1024   // 50 kb should be enough.
+        // Sometimes the Content-Length header is -1, so we have to wing it. :)
+        contentLength = 100 * 1024   // 100 kb should be enough.
     }
 
-    // Get the text of the body of the response.
+    // Get the text of the body of the response, which contains JSON.
     jsonBytes := make([]byte, contentLength)
     jsonBytesCount := 0
 
-    // Each call to resp.Body.Read will fill this slice of jsonBytes with the next group of bytes,
-    // then this slice will be advanced along slice jsonBytes to be ready for the next call to Read.
+    // Each call to httpResponse.Body.Read will fill some (or all) of this sub-slice of jsonBytes
+    // with the next group of bytes, then if necessary the start of this sub-slice will be advanced
+    // along slice jsonBytes to be ready for the next call to Read.
     jsonBytesForReading := jsonBytes[:contentLength] 
 
-    // Read the entire response body by calling resp.Body.Read() in a loop until bytesRead == 0 or
-    // err != nil.
+    // Read the entire response body by calling httpResponse.Body.Read() in a loop until err != nil.
     for {
-        bytesRead, err := resp.Body.Read(jsonBytesForReading)
+        bytesRead, err := httpResponse.Body.Read(jsonBytesForReading)
 
-        if bytesRead == 0 && err.Error() != "EOF" {
-            fmt.Printf("WARNING: bytesRead == 0: err == %v\n", err)
-        }
+        // For debugging.
+        // if bytesRead == 0 && err.Error() != "EOF" {
+        //     fmt.Printf("WARNING: bytesRead == 0: err == %v\n", err)
+        // }
 
         // Count the bytes we just read.
         jsonBytesCount += bytesRead
 
         if err != nil {
             // If we get an EOF error reading the body, break out of the loop.  This is the normal
-            // way we know that we have read the entire response body.
+            // indication that we have read the entire response body.
             if err.Error() == "EOF" {
                 break
             }
@@ -368,11 +370,12 @@ func getAIResponse(userMessage string, useWebSearch bool, useThinking bool) stri
     // For debugging.
     // fmt.Println("Got JSON:", string(jsonBytes[:jsonBytesCount]))
 
+    // This holds the unmarshaled JSON response from the AI.
     var response map[string]interface{}
 
     // Unmarshal the JSON into object 'response'.  Must use jsonBytes[:jsonBytesCount] to avoid reading
     // beyond the end of the data in slice jsonBytes.
-    err = json.Unmarshal(jsonBytes[:jsonBytesCount], &response)
+    err := json.Unmarshal(jsonBytes[:jsonBytesCount], &response)
 
     if err != nil {
         msg := fmt.Sprintf("Error: Error unmarshalling AI response: %s", err)
@@ -380,7 +383,7 @@ func getAIResponse(userMessage string, useWebSearch bool, useThinking bool) stri
         return msg
     }
 
-    // Check if the response contains content.
+    // Check if the response contains a 'content' key.
     contentSlice, ok := response["content"].([]interface{})
 
     if !ok || len(contentSlice) == 0 {
@@ -392,9 +395,32 @@ func getAIResponse(userMessage string, useWebSearch bool, useThinking bool) stri
     // This will hold the text returned by the AI.
     aiText := ""
 
-    // Iterate over all elements of contentSlice and concatenate the text.
+    // Iterate over all elements of contentSlice and concatenate the text.  contentSlice is a slice
+    // of maps having this form:
+    //
+    // [
+    //     {   // These elements are only present when thinking is enabled.
+    //         "type": "thinking",
+    //         "thinking": "<THINKING TEXT HERE>...",
+    //         "signature": "WaUjzkypQ2mUEVM36O2TxuC06KN8xyfbJwyem2dw3UjavL...."
+    //     },
+    //     {   // These elements contain the text of the AI's response.
+    //         "type": "text",
+    //         "text": "<AI RESPONSE HERE>..."
+    //     },
+    //     {
+    //         ...
+    //     },
+    //     ...
+    // ]
+    //
+    // This loop extracts the text from each element of contentSlice that has a "type" key with
+    // value "text", concatenates the text, and returns the concatenated text.
+    //
+    // NOTE: Currently, all non-text "type"s are ignored.
+
     for index := 0; index < len(contentSlice); index++ {
-        // Extract the map from the first contentSlice element.
+        // Get the map from contentSlice[index].
         contentElement, ok := contentSlice[index].(map[string]interface{})
 
         if !ok {
@@ -408,7 +434,7 @@ func getAIResponse(userMessage string, useWebSearch bool, useThinking bool) stri
             continue
         }
 
-        // Extract the value associated with key "text".  Some elements do not have 
+        // Extract the value associated with key "text".
         elementText, ok := contentElement["text"].(string)
 
         if !ok {
@@ -420,7 +446,7 @@ func getAIResponse(userMessage string, useWebSearch bool, useThinking bool) stri
         aiText += elementText
 
         // For debugging.
-        // fmt.Printf("%v: aiText = '%s'\n", index, aiText)
+        // fmt.Printf("contentSlice[%v]: aiText = '%s'\n", index, aiText)
     }
 
     // Return the AI-generated response text.
