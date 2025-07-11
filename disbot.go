@@ -21,7 +21,7 @@ var (
     // The base name of this executeable (e.g., 'disbot').
     Me = filepath.Base(os.Args[0])
 
-    // My Claude API key.  This is set from an environment variable.
+    // The AI's API key.  This is set from an environment variable.
     apiKey = ""
 
     // The bot's Discord authentication token.  This is set from an environment variable.
@@ -74,7 +74,7 @@ func main() {
 
     fmt.Println("Bot is running.  Press Ctrl-C to exit.")
 
-    // Wait here until CTRL-C or other term signal is received.
+    // Wait here until Ctrl-C or other term signal is received.
     sc := make(chan os.Signal, 1)
     signal.Notify(sc, os.Interrupt)
     <-sc
@@ -83,8 +83,8 @@ func main() {
     dg.Close()
 }
 
-// This function will be called (due to AddHandler) every time a new
-// message is created on any channel that the authenticated bot has access to.
+// This function will be called (due to AddHandler) every time a new message is send on any
+// channel (or DM) that the bot can see.
 func handleMessageCreateEvent(session *discordgo.Session, messageCreateEvent *discordgo.MessageCreate) {
     // Ignore all messages created by the bot itself
     if messageCreateEvent.Author.ID == session.State.User.ID {
@@ -136,7 +136,7 @@ func sendHelpMessage(session *discordgo.Session, messageCreateEvent *discordgo.M
                "You can also DM me, but you must use the '`!`' prefix even in DMs. My replies will " +
                "be brief, because tokens cost money. I don't know your Discord usernames. All of you " +
                "appear to me as a single user. I have no memory of your previous messages to me (yet). " +
-               "I cannot (yet) search the Web. I also respond to these commands:\n\n" +
+               "I cannot search the Web (yet). I also respond to these commands:\n\n" +
                "• `!status` - Shows my status and uptime.\n" +
                "• `!help`   - Shows this help message."
 
@@ -236,8 +236,8 @@ func sendAIGeneratedResponse(session *discordgo.Session, messageCreateEvent *dis
             timeUntilMessagesAllowed)
         session.ChannelMessageSend(messageCreateEvent.ChannelID, msg)
     } else {
-        // Generate a response from the AI.
-        aiResponse := generateAIResponse(userMessage)
+        // Generate a response from the AI.  Does not yet support Web search or thinking.
+        aiResponse := getAIResponse(userMessage, false, false)
 
         // Send the response text to the Discord server.
         session.ChannelMessageSend(messageCreateEvent.ChannelID, aiResponse)
@@ -250,7 +250,7 @@ func sendAIGeneratedResponse(session *discordgo.Session, messageCreateEvent *dis
 // This function obtains an AI-generated response to a user message received from Discord.  If
 // successful, it returns the AI-generated response, otherwise it returns a string describing the
 // nature of the error.
-func generateAIResponse(userMessage string) string {
+func getAIResponse(userMessage string, useWebSearch bool, useThinking bool) string {
     // This is the API endpoint URL.  See https://docs.anthropic.com/en/api/overview for details
     // about the Claude API.
     url := "https://api.anthropic.com/v1/messages"
@@ -313,6 +313,12 @@ func generateAIResponse(userMessage string) string {
         fmt.Println(msg)
         return msg
     }
+
+    // TODO: Refactor the below code into its own function.
+
+    // =============================================================================
+    // UNDER CONSTRUCTION
+    // =============================================================================
 
     // Get the 'Content-Length' header.
     contentLength := resp.ContentLength
