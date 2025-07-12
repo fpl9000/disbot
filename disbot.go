@@ -38,6 +38,17 @@ var (
 
     // This is true if reasoning is enabled in the query to the AI.
     reasoningEnabled = false
+
+    // The 'max_tokens' value sent in each AI request.
+    maxTokens = 2048
+
+    // When reasoningEnabled is true, this is the reasoning 'budget_tokens' value send in each AI
+    // request.  If this is smaller than 1024, Claude's API fails with HTTP error 400 (Bad Request).
+    thinkingMaxTokens = 1024
+
+    // When webSearchEnabled is true, is the 'max_uses' value send in the Web search tool definition
+    // in each AI request.
+    maxWebSearches = 2
 )
 
 // Package initialization.
@@ -63,6 +74,14 @@ func main() {
     // Parse the command-line switches.  This will set various package-scope variables based on the
     // command-line switches (or show usage and terminate in the case of erroneous usage).
     parseCommandLine()
+
+    if reasoningEnabled {
+        fmt.Println("Reasoning is enabled.")
+    }
+
+    if webSearchEnabled {
+        fmt.Println("Web search is enabled.")
+    }
 
     // Create a new Discord session using the bot token.
     dg, err := discordgo.New("Bot " + botToken)
@@ -199,9 +218,9 @@ func sendHelpMessage(session *discordgo.Session, messageCreateEvent *discordgo.M
 // This function sends a status message to the channel/DM where messageCreateEvent came from.
 func sendStatusMessage(session *discordgo.Session, messageCreateEvent *discordgo.MessageCreate) {
     states := []string{"nominal", "behaving", "rocking it", "within reason", "pretty good", "not too bad",
-                        "killing it", "grooving", "just peachy", "okey dokey", "fine, just fine",
-                        "... oh never mind", "reasonable", "adequate", "plausible", "howling",
-                        "superintelligent", "having a good day", "groovy", "👍", "🚀", "😎"}
+                       "killing it", "grooving", "just peachy", "okey dokey", "fine, just fine",
+                       "... oh never mind", "reasonable", "adequate", "plausible", "howling",
+                       "superintelligent", "having a good day", "groovy", "👍", "🚀", "😎"}
     state := states[rand.Intn(len(states))]  // Get a random state string.
     uptime := time.Since(startTime)
 
@@ -303,41 +322,45 @@ func sendAIGeneratedResponse(session *discordgo.Session, messageCreateEvent *dis
 
 // This function obtains an AI-generated response to a user message received from Discord.  If
 // successful, it returns the AI-generated response, otherwise it returns a string describing the
-// nature of the error.
+// nature of the error.  
 func getAIResponse(userMessage string, useWebSearch bool, useThinking bool) string {
     // This is the API endpoint URL.  See https://docs.anthropic.com/en/api/overview for details
     // about the Claude API.
     url := "https://api.anthropic.com/v1/messages"
 
-    // Get the AI's system prompt.
-    systemPrompt := getSystemPrompt()
-
     // Create the JSON request.
-    requestBody, err := json.Marshal(map[string]interface{}{
-        "model": "claude-sonnet-4-0",  // This is an alias for the latest Sonnet 4 version.
-        "max_tokens": 2048,  // The maximum number of tokens the AI will generate.
-        "system": systemPrompt,
-//      "thinking": {
-//          "type": "enabled",
-//          "budget_tokens": 1024  // Must be smaller than 'max_tokens' above.
-//      },
-        "messages": []map[string]string{  // An array of maps.
-            { "role": "user",
-              "content": userMessage },
-        },
-        // Include this key/value pair to enable Web search.
-        "tools": []map[string]interface{}{
-            { "type": "web_search_20250305",
-              "name": "web_search",
-              "max_uses": 2 },
-        },
-    })
+    jsonObject := make(map[string]interface{})
+
+    //jsonObject["model"] = "claude-sonnet-4-0"  // This is an alias for the latest Sonnet 4 version.
+    jsonObject["model"] = "claude-sonnet-4-20250514"
+
+    jsonObject["max_tokens"] = maxTokens       // The maximum number of tokens the AI will generate.
+    jsonObject["system"] = getSystemPrompt()
+
+    // TODO: Support conversation history.
+    jsonObject["messages"] = []map[string]string{{ "role": "user", "content": userMessage }}
+
+    if reasoningEnabled {
+        // Here, 'budget_tokens' must be smaller than 'max_tokens' above.
+        jsonObject["thinking"] = map[string]interface{}{ "type": "enabled", "budget_tokens": thinkingMaxTokens }
+    }
+
+    if webSearchEnabled {
+        jsonObject["tools"] = []map[string]interface{}{{"type": "web_search_20250305",
+                                                        "name": "web_search",
+                                                        "max_uses": maxWebSearches }}
+    }
+
+    requestBody, err := json.Marshal(jsonObject)
 
     if err != nil {
         msg := fmt.Sprintf("Error: Error creating request body: %s", err)
         fmt.Println(msg)
         return msg
     }
+
+    // For debugging.
+    // fmt.Println("Request JSON =", string(requestBody))
 
     // Create the HTTP request from the above requestBody.
     req, err := http.NewRequest("POST", url, bytes.NewBuffer(requestBody))
@@ -385,7 +408,7 @@ func parseAIResponse(httpResponse *http.Response) string {
     contentLength := httpResponse.ContentLength
 
     // For debugging.
-    fmt.Printf("contentLength = %v\n", contentLength)
+    // fmt.Printf("contentLength = %v\n", contentLength)
 
     if contentLength <= 0 {
         // Sometimes the Content-Length header is -1, so we have to wing it.  Hopefully, 1 MB is
@@ -414,7 +437,8 @@ func parseAIResponse(httpResponse *http.Response) string {
         // Increment the accumulated number of  bytes we just read.
         jsonBytesCount += bytesRead
 
-        fmt.Printf("bytesRead = %v, jsonBytesCount = %v\n", bytesRead, jsonBytesCount)
+        // For debugging.
+        // fmt.Printf("bytesRead = %v, jsonBytesCount = %v\n", bytesRead, jsonBytesCount)
 
         if err != nil {
             // If we get an EOF error reading the body, break out of the loop.  This is the normal
@@ -442,7 +466,13 @@ func parseAIResponse(httpResponse *http.Response) string {
     }
 
     // For debugging.
-    fmt.Printf("Got %v bytes of JSON.\n", jsonBytesCount)
+    // fmt.Printf("Got %v bytes of JSON.\n", jsonBytesCount)
+
+    // TODO: Refactor the rest of this function into a separate function.
+
+    // =============================================================================
+    // UNDER CONSTRUCTION
+    // =============================================================================
 
     // This holds the unmarshaled JSON response from the AI.
     var response map[string]interface{}
@@ -469,31 +499,15 @@ func parseAIResponse(httpResponse *http.Response) string {
     // This will hold the text returned by the AI.
     aiText := ""
 
+    // This will hold the reasoning trace returned by the AI.
+    thinkingText := ""
+
     // Iterate over all elements of contentSlice and concatenate the text.  contentSlice is a slice
-    // of maps having this form:
-    //
-    // [
-    //     {   // These elements are only present when thinking is enabled.
-    //         "type": "thinking",
-    //         "thinking": "<THINKING TEXT HERE>...",
-    //         "signature": "WaUjzkypQ2mUEVM36O2TxuC06KN8xyfbJwyem2dw3UjavL...."
-    //     },
-    //     {   // These elements contain the text of the AI's response.
-    //         "type": "text",
-    //         "text": "<AI RESPONSE HERE>..."
-    //     },
-    //     {
-    //         // If Web search is enabled, // Other "type"s may be present, such as "server_tool_use",
-    //         // "web_search_tool", and "citations".
-    //         ...
-    //     },
-    //     ...
-    // ]
-    //
-    // This loop extracts the text from each element of contentSlice that has a "type" key with
-    // value "text", concatenates the text, and returns the concatenated text.
-    //
-    // NOTE: Currently, all non-text "type"s are ignored.
+    // of maps.  This loop extracts the text from each element of contentSlice that has a "type" key
+    // with value "text", concatenates the text, and returns the concatenated text.  All other
+    // "type" values are ignored (e.g., "server_tool_use", "web_search_tool", and "citations"), but
+    // When reasoningEnabled is true, this also handles "type" value "thinking", which comes with
+    // key "thinking" whose value is the reasoning trace.
 
     for index := 0; index < len(contentSlice); index++ {
         // Get the map from contentSlice[index].
@@ -505,28 +519,48 @@ func parseAIResponse(httpResponse *http.Response) string {
             return msg
         }
 
-        // If the value of key "type" in the map is not "text", skip this element of contentSlice.
-        if contentElement["type"] != "text" {
-            continue
+        // Ignore all content types except "text" and "thinking".
+
+        if contentElement["type"] == "text" {
+            // Extract the text value associated with key "text".
+            elementText, ok := contentElement["text"].(string)
+
+            if !ok {
+                msg := "Error: Failed to find expected JSON (#2)."
+                fmt.Println(msg)
+                return msg
+            }
+
+            aiText += elementText
+
+            // For debugging.
+            // fmt.Printf("text: %v: aiText = '%s'\n", index, aiText)
         }
 
-        // Extract the value associated with key "text".
-        elementText, ok := contentElement["text"].(string)
+        if contentElement["type"] == "thinking" {
+            // Extract the text value associated with key "thinking".
+            elementText, ok := contentElement["thinking"].(string)
 
-        if !ok {
-            msg := "Error: Failed to find expected JSON (#2)."
-            fmt.Println(msg)
-            return msg
+            if !ok {
+                msg := "Error: Failed to find expected JSON (#3)."
+                fmt.Println(msg)
+                return msg
+            }
+
+            // Append the thinking text to the AI response.
+            thinkingText += elementText
+
+            // For debugging.
+            // fmt.Printf("thinking: %v: thinkingText = '%s'\n", index, thinkingText)
         }
-
-        aiText += elementText
-
-        // For debugging.
-        // fmt.Printf("contentSlice[%v]: aiText = '%s'\n", index, aiText)
     }
 
-    // Return the AI-generated response text.
-    return aiText
+    // Return the AI-generated response.
+    if reasoningEnabled {
+        return "**<thinking>**" + thinkingText + "\n**</thinking>**\n\n" + aiText
+    } else {
+        return aiText
+    }
 }
 
 // This function sends a message to an arbitrary channel.  Returns the empty string if successful,
