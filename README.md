@@ -7,6 +7,9 @@ Usage: `disbot [ --think ] [ --search ]`
 - `--think`: Use Claude's extended thinking when generating responses.
 - `--search`: Use Claude's Web search tool when generating responses.
 
+Note that `--search` will result in many thousands of additional tokens being generated, which will
+increase the cost of the API calls.
+
 You must set environment variables `DISCORD_BOT_TOKEN` and `ANTHROPIC_API_KEY` before launching the
 bot, as follows:
 
