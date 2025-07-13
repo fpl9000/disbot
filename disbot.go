@@ -226,6 +226,15 @@ func sendStatusMessage(session *discordgo.Session, messageCreateEvent *discordgo
     uptime := time.Since(startTime)
 
     msg := fmt.Sprintf("All systems are %v.  I have been running for %v.", state, uptime.Round(time.Second))
+
+    if webSearchEnabled {
+        msg += " Web searching is enabled."
+    }
+
+    if reasoningEnabled {
+        msg += " Extended thinking is enabled."
+    }
+
     session.ChannelMessageSend(messageCreateEvent.ChannelID, msg)
 }
 
