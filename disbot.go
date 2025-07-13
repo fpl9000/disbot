@@ -49,7 +49,7 @@ var (
 
     // When webSearchEnabled is true, is the 'max_uses' value send in the Web search tool definition
     // in each AI request.
-    maxWebSearches = 2
+    maxWebSearches = 1
 )
 
 // Package initialization.
@@ -276,18 +276,20 @@ func handleSayCommand(session *discordgo.Session, messageCreateEvent *discordgo.
 func getSystemPrompt() string {
     todaysDate := time.Now().Format(time.DateOnly)
 
-    var webSearchReference string
+    var webSearchPrompt string
 
     if reasoningEnabled {
-        webSearchReference = ", even when using the Web search tool."
+        webSearchPrompt = "Only use the Web search tool when you do not have the knowledge " +
+                          "needed to respond. "
     } else {
-        webSearchReference = "."
+        webSearchPrompt = "."
     }
 
     return fmt.Sprintf("Today's date is %s. You are a helpful assistant that provides concise and " +
                        "accurate answers to user queries. Your responses should be short: only 2 or 3 " +
-                       "sentences" + webSearchReference +
-                       " Your user is one of a set of people connected to a Discord server (as are you), " +
+                       "sentences. " +
+                       webSearchPrompt +
+                       "The user is one of a group of people connected to a Discord server (as are you), " +
                        "but you cannot distinguish one user from another. Your output must use Discord " +
                        "markdown so that it renders correctly.", todaysDate)
 }
