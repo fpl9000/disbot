@@ -209,7 +209,7 @@ func sendHelpMessage(session *discordgo.Session, messageCreateEvent *discordgo.M
                "You can also DM me, but you must use the '`!`' prefix even in DMs. My replies will " +
                "be brief, because tokens cost money. I don't know your Discord usernames. All of you " +
                "appear to me as a single user. I have no memory of your previous messages to me (yet). " +
-               "I cannot search the Web (yet). I also respond to these commands:\n\n" +
+               "I also respond to these commands:\n\n" +
                "• `!status` - Shows my status and uptime.\n" +
                "• `!help`   - Shows this help message."
 
