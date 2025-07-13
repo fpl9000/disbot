@@ -274,9 +274,9 @@ func getSystemPrompt() string {
 
     return fmt.Sprintf("Today's date is %s. You are a helpful assistant that provides concise and " +
                        "accurate answers to user queries. Your responses should be short: only 2 or 3 " +
-                       "sentences, even when searching the Web. Your user is one of a set of people " +
-                       "connected to a Discord server (as are you), but you cannot distinguish one " +
-                       "user from another. Your output must use Discord markdown so that it renders " +
+                       "sentences, even when using the Web search tool. Your user is one of a set of " +
+                       "people connected to a Discord server (as are you), but you cannot distinguish " +
+                       "one user from another. Your output must use Discord markdown so that it renders " +
                        "correctly.", todaysDate)
 }
 
@@ -298,15 +298,15 @@ func sendAIGeneratedResponse(session *discordgo.Session, messageCreateEvent *dis
     // Rmember the time of this message, so we can throttle replies if messages arrive to quickly.
     thisMessageTime := time.Now()
 
-    // Do not allow users to message the bot too frequently.
-    rateLimitWindow := 15 * time.Second
-    timeSinceLastMessage := time.Since(prevMessageTime)
-    timeUntilMessagesAllowed := rateLimitWindow - timeSinceLastMessage + 1
+    // Do not allow users to message the bot more than once per rateLimitWindow seconds.
+    minSecondsBetweenMessages := 10 * time.Second
+    secondsSinceLastMessage := time.Since(prevMessageSeconds).Seconds()
+    secondsUntilMessagesAllowed := math.Round(minSecondsBetweenMessages - secondsSinceLastMessage + 0.5)
 
-    if (!prevMessageTime.IsZero() && timeSinceLastMessage < rateLimitWindow) {
+    if (!prevMessageSeconds.IsZero() && secondsSinceLastMessage < minSecondsBetweenMessages) {
         // Too little time has passed since the previous message to this bot.
-        msg := fmt.Sprintf("Arrghhh! I'm overloaded. Please wait %v seconds before talking to me.",
-            timeUntilMessagesAllowed)
+        msg := fmt.Sprintf("Sorry, I'm overloaded. Please wait %v seconds before talking to me.",
+                           secondsUntilMessagesAllowed)
         session.ChannelMessageSend(messageCreateEvent.ChannelID, msg)
     } else {
         // Generate a response from the AI.  Does not yet support Web search or thinking.
@@ -317,7 +317,7 @@ func sendAIGeneratedResponse(session *discordgo.Session, messageCreateEvent *dis
     }
 
     // Remember the time that this message was processed.
-    prevMessageTime = thisMessageTime
+    prevMessageSeconds = thisMessageTime
 }
 
 // This function obtains an AI-generated response to a user message received from Discord.  If
@@ -478,7 +478,7 @@ func parseAIResponse(httpResponse *http.Response) string {
     var response map[string]interface{}
 
     // Unmarshal the JSON into object 'response'.  Must use jsonBytes[:jsonBytesCount] to avoid reading
-    // beyond the end of the data in slice jsonBytes.
+    // beyond the end of the valid data in slice jsonBytes.
     err := json.Unmarshal(jsonBytes[:jsonBytesCount], &response)
 
     if err != nil {
