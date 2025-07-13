@@ -218,9 +218,9 @@ func sendHelpMessage(session *discordgo.Session, messageCreateEvent *discordgo.M
 
 // This function sends a status message to the channel/DM where messageCreateEvent came from.
 func sendStatusMessage(session *discordgo.Session, messageCreateEvent *discordgo.MessageCreate) {
-    states := []string{"nominal", "behaving", "rocking it", "within reason", "pretty good", "not too bad",
+    states := []string{"nominal", "behaving", "rocking it", "within reason", "pretty good", "being real",
                        "killing it", "grooving", "just peachy", "okey dokey", "fine, just fine",
-                       "... oh never mind", "reasonable", "adequate", "plausible", "howling",
+                       "... oh never mind", "reasonable", "adequate", "plausible", "howling", "meh",
                        "superintelligent", "having a good day", "groovy", "👍", "🚀", "😎"}
     state := states[rand.Intn(len(states))]  // Get a random state string.
     uptime := time.Since(startTime)
