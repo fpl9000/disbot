@@ -254,6 +254,9 @@ func handleSayCommand(session *discordgo.Session, messageCreateEvent *discordgo.
     // Remove the channel name and leading/trailing whitespace from message.
     message = strings.TrimSpace(strings.TrimPrefix(message, channelName))
 
+    // Add a prefix saying this message is from Fran.
+    message = "Fran asked me to say this: " + message
+
     // Send the message to the specified channel.
     errMsg := sendMessageToChannel(session, channelName, message)
 
