@@ -14,8 +14,8 @@ You must set environment variables `DISCORD_BOT_TOKEN` and `ANTHROPIC_API_KEY` b
 bot, as follows:
 
 ```
-$ export ANTHROPIC_API_KEY="..."
 $ export DISCORD_BOT_TOKEN="..."
+$ export ANTHROPIC_API_KEY="..."
 $ ./disbot
 ```
 
