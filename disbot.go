@@ -13,10 +13,15 @@ import (
     "math"
     "math/rand"
     "strings"
+    "strconv"
     "time"
 
     "github.com/bwmarrin/discordgo"
 )
+
+// Package scope constants.
+const DEFAULT_MAX_RECENT_MESSAGES = 10
+
 
 // Package scope variables.
 var (
@@ -53,7 +58,7 @@ var (
     maxWebSearches = 1
 
     // The maximum number of elements in list recentMessages (below).
-    maxRecentMessages = 10
+    maxRecentMessages = DEFAULT_MAX_RECENT_MESSAGES
 
     // This is a list that holds the recent messages from the user and the AI, so it can have
     // context for the conversation.  This is a slice of maps of the form:
@@ -142,8 +147,8 @@ func parseCommandLine() {
     }
 
     // Check for command-line switches.
-    for i := 1; i < len(os.Args); i++ {
-        argument := os.Args[i]
+    for index := 1; index < len(os.Args); index++ {
+        argument := os.Args[index]
 
         switch argument {
         case "--search":
@@ -158,6 +163,29 @@ func parseCommandLine() {
             // Show usage and exit.
             usage()
 
+        case "--history":
+            // Set the maximum number of recent messages to keep.
+            index++ // Advance to the next argument, which should be the number of messages to keep.
+
+            if index >= len(os.Args) {
+                fmt.Printf("%v: Missing parameter for switch '%v'!\n\n", Me, argument)
+                usage()
+            }
+
+            // Get the number of messages to keep.
+            var err error
+            maxRecentMessages, err = strconv.Atoi(os.Args[index])
+
+            if err != nil || maxRecentMessages <= 0 {
+                fmt.Printf("%v: Invalid parameter for switch '%v': '%v'!\n\n", Me, argument, os.Args[index])
+                usage()
+            }
+
+            if maxRecentMessages % 2 != 0 {
+                fmt.Printf("%v: The value for switch '%v' must be an even number!\n\n", Me, argument)
+                usage()
+            }
+
         default:
             fmt.Printf("%v: Unrecognized switch: '%v'!\n\n", Me, argument)
             usage()
@@ -167,11 +195,13 @@ func parseCommandLine() {
 
 // Display usage and terminate.
 func usage() {
-    msg := "usage: " + Me + " [ --search ] [ --think ]\n\n" +
-           "--search  =>  Enable Web searching in the AI.\n" +
-           "--think   =>  Enable reasoning in the AI."
+    msg := "usage: " + Me + " [ --search ] [ --think ] [ --history N ]\n\n" +
+           "--search     =>  Enable Web searching in the AI.\n" +
+           "--think      =>  Enable reasoning in the AI.\n" +
+           "--history N  =>  Keep N most recent user/AI messages (default: %v).\n" +
+           "                 (N must be an even integer.)\n"
 
-    fmt.Println(msg)
+    fmt.Printf(msg, DEFAULT_MAX_RECENT_MESSAGES)
     os.Exit(1)
 }
 
@@ -576,10 +606,12 @@ func parseAIResponse(httpResponse *http.Response) string {
     recentMessages.PushFront(map[string]string{ "role": "assistant",
                                                 "content": thinkingText + "\n\n" + aiText })
 
-    // If the length of list recentMessages equals or exceeds maxRecentMessages, remove the 2 oldest
-    // elements.  We remove the 2 oldest to maintain the invariant that the list always contains
-    // pairs of "user" and "assistant" elements, which alternate in the list.
-    if recentMessages.Len() >= maxRecentMessages {
+    // If the length of list recentMessages equals or exceeds maxRecentMessages + 2, remove the 2
+    // oldest elements.  We remove the 2 oldest to maintain the invariant that the list always
+    // contains pairs of "user" and "assistant" elements, which alternate in the list.  We use
+    // 'maxRecentMessages + 2' so that after removing the 2 oldest messages, there are
+    // maxRecentMessages remaining, so the AI will see all of them on the next user query.
+    if recentMessages.Len() >= maxRecentMessages + 2 {
         recentMessages.Remove(recentMessages.Back())
         recentMessages.Remove(recentMessages.Back())
     }
