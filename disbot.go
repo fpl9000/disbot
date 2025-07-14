@@ -50,6 +50,26 @@ var (
     // When webSearchEnabled is true, is the 'max_uses' value send in the Web search tool definition
     // in each AI request.
     maxWebSearches = 1
+
+    // The maximum number of elements in slice recentMessages (below).
+    maxRecentMessages = 10
+
+    // This holds the recent messages from the user and the AI, so it can have context for the
+    // conversation.  This is a slice of maps of the form:
+    //
+    //  [{ "role": "user", "content": "..." }
+    //   { "role": "assistant", "content": "..." }
+    //   { "role": "user", "content": "..." }
+    //   { "role": "assistant", "content": "..." }
+    //   ...
+    //  ]
+    //
+    // where the "role" alternates between "user" and "assistant", and the "content" is the
+    // text of the message.  This is initially an empty slice into a 5-element array of maps.
+    //
+    // NOTE: Make the capacity of this slice an even number so the slice always contains an equal
+    // number of "user" and "assistant" entries.
+    recentMessages = make([]map[string]string, 0, maxRecentMessages)
 )
 
 // Package initialization.
@@ -360,8 +380,17 @@ func getAIResponse(userMessage string, useWebSearch bool, useThinking bool) stri
     jsonObject["max_tokens"] = maxTokens       // The maximum number of tokens the AI will generate.
     jsonObject["system"] = getSystemPrompt()
 
-    // TODO: Support conversation history.
-    jsonObject["messages"] = []map[string]string{{ "role": "user", "content": userMessage }}
+    // Extend slice recentMessages to contain a new element that is map[string]string{ "role":
+    // "user", "content": userMessage }).  This will re-allocate the underlying array if the current
+    // array is not big enough, but that should not happen because we will drop the first 2 elements
+    // after getting the AI's response and appending it to recentMessages.
+    recentMessages = append(recentMessages, map[string]string{ "role": "user", "content": userMessage })
+
+    // For debugging.
+    fmt.Printf("getAIResponse: len(recentMessages) = %v, cap(recentMessages) = %v\n",
+               len(recentMessages), cap(recentMessages))
+
+    jsonObject["messages"] = recentMessages
 
     if reasoningEnabled {
         // Here, 'budget_tokens' must be smaller than 'max_tokens' above.
@@ -512,6 +541,23 @@ func parseAIResponse(httpResponse *http.Response) string {
             // fmt.Printf("thinking: %v: thinkingText = '%s'\n", index, thinkingText)
         }
     }
+
+    // Update recentMessages to have the AI's response.
+    if len(recentMessages) >= (maxRecentMessages - 1) {
+        // Drop the oldest 2 elements (1 user plus 1 assistant message) from slice recentMessages to
+        // make room for more.
+        recentMessages = recentMessages[2:]
+    }
+
+    // Extend slice recentMessages to contain a new element that is the AI's response.  Include both
+    // the reasoning and response text.
+    recentMessages = append(recentMessages,
+                            map[string]string{"role": "assistant",
+                                              "content": thinkingText + "\n\n" + aiText })
+
+    // For debugging.
+    fmt.Printf("parseAIResponse: len(recentMessages) = %v, cap(recentMessages) = %v\n",
+               len(recentMessages), cap(recentMessages))
 
     // Return the AI-generated response.
     if reasoningEnabled {
