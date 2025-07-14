@@ -2,6 +2,7 @@ package main
 
 import (
     "bytes"
+    "container/list"
     "encoding/json"
     "fmt"
     "net/http"
@@ -51,25 +52,23 @@ var (
     // in each AI request.
     maxWebSearches = 1
 
-    // The maximum number of elements in slice recentMessages (below).
+    // The maximum number of elements in list recentMessages (below).
     maxRecentMessages = 10
 
-    // This holds the recent messages from the user and the AI, so it can have context for the
-    // conversation.  This is a slice of maps of the form:
+    // This is a list that holds the recent messages from the user and the AI, so it can have
+    // context for the conversation.  This is a slice of maps of the form:
     //
-    //  [{ "role": "user", "content": "..." }
+    //  {{ "role": "user", "content": "..." }
     //   { "role": "assistant", "content": "..." }
     //   { "role": "user", "content": "..." }
     //   { "role": "assistant", "content": "..." }
     //   ...
-    //  ]
+    //  }
     //
     // where the "role" alternates between "user" and "assistant", and the "content" is the
-    // text of the message.  This is initially an empty slice into a 5-element array of maps.
-    //
-    // NOTE: Make the capacity of this slice an even number so the slice always contains an equal
-    // number of "user" and "assistant" entries.
-    recentMessages = make([]map[string]string, 0, maxRecentMessages)
+    // text of the message.  The newest element recentMessages.Front(), and the oldest
+    // is recentMessages.Back().
+    recentMessages = list.New()
 )
 
 // Package initialization.
@@ -371,42 +370,47 @@ func getAIResponse(userMessage string, useWebSearch bool, useThinking bool) stri
     // about the Claude API.
     url := "https://api.anthropic.com/v1/messages"
 
-    // Create the JSON request.
-    jsonObject := make(map[string]interface{})
-
-    //jsonObject["model"] = "claude-sonnet-4-0"  // This is an alias for the latest Sonnet 4 version.
-    jsonObject["model"] = "claude-sonnet-4-20250514"
-
-    jsonObject["max_tokens"] = maxTokens       // The maximum number of tokens the AI will generate.
-    jsonObject["system"] = getSystemPrompt()
-
-    // Extend slice recentMessages to contain a new element that is map[string]string{ "role":
-    // "user", "content": userMessage }).  This will re-allocate the underlying array if the current
-    // array is not big enough, but that should not happen because we will drop the first 2 elements
-    // after getting the AI's response and appending it to recentMessages.
-    recentMessages = append(recentMessages, map[string]string{ "role": "user", "content": userMessage })
+    // Save the user message as the newest element in the conversation history.  This must happen
+    // before we call json.Marshal(jsonObject).
+    recentMessages.PushFront(map[string]string{ "role": "user", "content": userMessage })
 
     // For debugging.
-    fmt.Printf("getAIResponse: len(recentMessages) = %v, cap(recentMessages) = %v\n",
-               len(recentMessages), cap(recentMessages))
+    fmt.Printf("getAIResponse: recentMessages.Len() = %v\n", recentMessages.Len())
 
-    jsonObject["messages"] = recentMessages
+    // Create the JSON request.
+    jsonObject := make(map[string]any)
+
+    // TODO: Switch these next two lines.
+    //jsonObject["model"] = "claude-sonnet-4-0"  // This is an alias for the latest Sonnet 4 version.
+    jsonObject["model"] = "claude-sonnet-4-20250514"
+    jsonObject["max_tokens"] = maxTokens         // The maximum number of tokens the AI will generate.
+    jsonObject["system"] = getSystemPrompt()
+
+    recentMessagesSlice, err := getRecentMessagesAsSlice()
+
+    if err != nil {
+        msg := fmt.Sprintf("Error: getRecentMessagesAsSlice failed: %s", err)
+        fmt.Println(msg)
+        return msg
+    }
+
+    jsonObject["messages"] = recentMessagesSlice
 
     if reasoningEnabled {
         // Here, 'budget_tokens' must be smaller than 'max_tokens' above.
-        jsonObject["thinking"] = map[string]interface{}{ "type": "enabled", "budget_tokens": thinkingMaxTokens }
+        jsonObject["thinking"] = map[string]any{ "type": "enabled", "budget_tokens": thinkingMaxTokens }
     }
 
     if webSearchEnabled {
-        jsonObject["tools"] = []map[string]interface{}{{"type": "web_search_20250305",
-                                                        "name": "web_search",
-                                                        "max_uses": maxWebSearches }}
+        jsonObject["tools"] = []map[string]any{{"type": "web_search_20250305",
+                                                "name": "web_search",
+                                                "max_uses": maxWebSearches }}
     }
 
     requestBody, err := json.Marshal(jsonObject)
 
     if err != nil {
-        msg := fmt.Sprintf("Error: Error creating request body: %s", err)
+        msg := fmt.Sprintf("Error: Error marshaling request: %s", err)
         fmt.Println(msg)
         return msg
     }
@@ -453,6 +457,32 @@ func getAIResponse(userMessage string, useWebSearch bool, useThinking bool) stri
     return parseAIResponse(httpResponse)
 }
 
+// This function converts package-scope variable recentMessages into a slice of map[string]string.
+func getRecentMessagesAsSlice() ([]map[string]string, error) {
+    // This will hold the slice of messages to be sent in the JSON request.
+    messagesSlice := make([]map[string]string, 0, recentMessages.Len())
+
+    // Iterate over the elements of recentMessages, which is a list of maps, and append each map to
+    // messagesSlice.
+    for e := recentMessages.Back(); e != nil; e = e.Prev() {
+        // Get the map from the list element.
+        messageMap, ok := e.Value.(map[string]string)
+
+        if !ok {
+            // This should never happen, because we only push instances of map[string]string into
+            // list recentMessages.
+            msg := "Error: getRecentMessagesAsSlice: Failed to get map from recentMessages!"
+            fmt.Println(msg)
+            return nil, fmt.Errorf(msg)
+        }
+
+        // Append messageMap to messagesSlice.
+        messagesSlice = append(messagesSlice, messageMap)
+    }
+
+    return messagesSlice, nil
+}
+
 // This function processes the HTTP response from the AI and returns the AI-generated response text.
 func parseAIResponse(httpResponse *http.Response) string {
     jsonBytes, jsonBytesCount, msg := getJSON(httpResponse)
@@ -462,7 +492,7 @@ func parseAIResponse(httpResponse *http.Response) string {
     }
 
     // This holds the unmarshaled JSON response from the AI.
-    var response map[string]interface{}
+    var response map[string]any
 
     // Unmarshal the JSON into object 'response'.  Must use jsonBytes[:jsonBytesCount] to avoid reading
     // beyond the end of the valid data in slice jsonBytes.
@@ -475,7 +505,7 @@ func parseAIResponse(httpResponse *http.Response) string {
     }
 
     // Check if the response contains a 'content' key.
-    contentSlice, ok := response["content"].([]interface{})
+    contentSlice, ok := response["content"].([]any)
 
     if !ok || len(contentSlice) == 0 {
         msg := "Error: Failed to find expected JSON (#0)."
@@ -498,7 +528,7 @@ func parseAIResponse(httpResponse *http.Response) string {
 
     for index := 0; index < len(contentSlice); index++ {
         // Get the map from contentSlice[index].
-        contentElement, ok := contentSlice[index].(map[string]interface{})
+        contentElement, ok := contentSlice[index].(map[string]any)
 
         if !ok {
             msg := "Error: Failed to find expected JSON (#1)."
@@ -543,21 +573,19 @@ func parseAIResponse(httpResponse *http.Response) string {
     }
 
     // Update recentMessages to have the AI's response.
-    if len(recentMessages) >= (maxRecentMessages - 1) {
-        // Drop the oldest 2 elements (1 user plus 1 assistant message) from slice recentMessages to
-        // make room for more.
-        recentMessages = recentMessages[2:]
+    recentMessages.PushFront(map[string]string{ "role": "assistant",
+                                                "content": thinkingText + "\n\n" + aiText })
+
+    // If the length of list recentMessages equals or exceeds maxRecentMessages, remove the 2 oldest
+    // elements.  We remove the 2 oldest to maintain the invariant that the list always contains
+    // pairs of "user" and "assistant" elements, which alternate in the list.
+    if recentMessages.Len() >= maxRecentMessages {
+        recentMessages.Remove(recentMessages.Back())
+        recentMessages.Remove(recentMessages.Back())
     }
 
-    // Extend slice recentMessages to contain a new element that is the AI's response.  Include both
-    // the reasoning and response text.
-    recentMessages = append(recentMessages,
-                            map[string]string{"role": "assistant",
-                                              "content": thinkingText + "\n\n" + aiText })
-
     // For debugging.
-    fmt.Printf("parseAIResponse: len(recentMessages) = %v, cap(recentMessages) = %v\n",
-               len(recentMessages), cap(recentMessages))
+    fmt.Printf("parseAIResponse: recentMessages.Len() = %v\n", recentMessages.Len())
 
     // Return the AI-generated response.
     if reasoningEnabled {
