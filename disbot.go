@@ -22,7 +22,6 @@ import (
 // Package scope constants.
 const DEFAULT_MAX_RECENT_MESSAGES = 10
 
-
 // Package scope variables.
 var (
     // The base name of this executeable (e.g., 'disbot').
@@ -214,7 +213,12 @@ func handleMessageCreateEvent(session *discordgo.Session, messageCreateEvent *di
     }
 
     // For debugging.
-    // fmt.Println("messageCreateEvent.Author.ID =", messageCreateEvent.Author.ID)
+    fmt.Printf("messageCreateEvent.Author.Username = '%s'\n", messageCreateEvent.Author.Username)
+    fmt.Printf("messageCreateEvent.ChannelID = '%s'\n", messageCreateEvent.ChannelID)
+    fmt.Printf("messageCreateEvent.GuildID = '%s'\n", messageCreateEvent.GuildID)
+    if messageCreateEvent.Member != nil {
+        fmt.Println("messageCreateEvent.Member.Nick =", messageCreateEvent.Member.Nick)
+    }
 
     // Strip leading and trailing whitespace.
     messageCreateEvent.Content = strings.TrimSpace(messageCreateEvent.Content)
@@ -494,9 +498,9 @@ func getRecentMessagesAsSlice() ([]map[string]string, error) {
 
     // Iterate over the elements of recentMessages, which is a list of maps, and append each map to
     // messagesSlice.
-    for e := recentMessages.Back(); e != nil; e = e.Prev() {
+    for element := recentMessages.Back(); element != nil; element = element.Prev() {
         // Get the map from the list element.
-        messageMap, ok := e.Value.(map[string]string)
+        messageMap, ok := element.Value.(map[string]string)
 
         if !ok {
             // This should never happen, because we only push instances of map[string]string into
