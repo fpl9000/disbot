@@ -337,8 +337,8 @@ func getSystemPrompt() string {
     var webSearchPrompt string
 
     if reasoningEnabled {
-        webSearchPrompt = "Only use the Web search tool when you do not have the knowledge " +
-                          "needed to respond. "
+        webSearchPrompt = "Only use the Web search tool when you do not have the necessary " +
+                          "knowledge to respond. "
     } else {
         webSearchPrompt = "."
     }
