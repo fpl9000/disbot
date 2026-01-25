@@ -19,6 +19,9 @@ import (
     "github.com/bwmarrin/discordgo"
 )
 
+// Type aliases.
+type List = list.List
+
 // Package scope constants.
 const DEFAULT_MAX_RECENT_MESSAGES = 10
 
@@ -39,11 +42,13 @@ var (
     // The time of the last message received from a Discord user.  Used to throttle responses.
     prevMessageSeconds time.Time
 
-    // This is true if Web search is enable in the query to the AI.
-    webSearchEnabled = false
+    // This is true if Web search is enable in the query to the AI.  Override this with switch
+    // --nosearch.
+    webSearchEnabled = true
 
-    // This is true if reasoning is enabled in the query to the AI.
-    reasoningEnabled = false
+    // This is true if reasoning is enabled in the query to the AI.  Override this with switch
+    // --nothink.
+    reasoningEnabled = true
 
     // The 'max_tokens' value sent in each AI request.
     maxTokens = 2048
@@ -56,24 +61,24 @@ var (
     // in each AI request.
     maxWebSearches = 1
 
-    // The maximum number of elements in list recentMessages (below).
+    // The maximum number of messages to save in each channel's or user's conversation history
+    // (incuding the AI's messages).  Must be an even number, because each conversation history
+    // should contain pairs of user/AI messages.  Switch --history overrides the default value of
+    // this variable.
     maxRecentMessages = DEFAULT_MAX_RECENT_MESSAGES
-
-    // This is a list that holds the recent messages from the user and the AI, so it can have
-    // context for the conversation.  This is a slice of maps of the form:
-    //
-    //  {{ "role": "user", "content": "..." }
-    //   { "role": "assistant", "content": "..." }
-    //   { "role": "user", "content": "..." }
-    //   { "role": "assistant", "content": "..." }
-    //   ...
-    //  }
-    //
-    // where the "role" alternates between "user" and "assistant", and the "content" is the
-    // text of the message.  The newest element recentMessages.Front(), and the oldest
-    // is recentMessages.Back().
-    recentMessages = list.New()
 )
+
+// Display usage and terminate.
+func usage() {
+    msg := "usage: " + Me + " [ --search ] [ --think ] [ --history N ]\n\n" +
+           "--nosearch   =>  Disable Web searching in the AI.\n" +
+           "--nothink    =>  Disable reasoning in the AI.\n" +
+           "--history N  =>  Keep N most recent user/AI messages (default: %v).\n" +
+           "                 (N must be an even integer.)\n"
+
+    fmt.Printf(msg, DEFAULT_MAX_RECENT_MESSAGES)
+    os.Exit(1)
+}
 
 // Package initialization.
 func init() {
@@ -89,7 +94,7 @@ func init() {
     botToken = os.Getenv("DISCORD_BOT_TOKEN")
 
     if botToken == "" {
-        fmt.Printf("%s: Environment variable DISCORD_BOT_TOKEN is not set!\n", Me)
+        fmt.Printf("%v: Environment variable DISCORD_BOT_TOKEN is not set!\n", Me)
         os.Exit(1)
     }
 }
@@ -150,13 +155,13 @@ func parseCommandLine() {
         argument := os.Args[index]
 
         switch argument {
-        case "--search":
-            // Enable Web searching in the AI.
-            webSearchEnabled = true
+        case "--nosearch":
+            // Disable Web searching in the AI.
+            webSearchEnabled = false
 
-        case "--think":
-            // Enable reasoning in the AI.
-            reasoningEnabled = true
+        case "--nothink":
+            // Disable reasoning in the AI.
+            reasoningEnabled = false
 
         case "--help", "-h":
             // Show usage and exit.
@@ -192,54 +197,38 @@ func parseCommandLine() {
     }
 }
 
-// Display usage and terminate.
-func usage() {
-    msg := "usage: " + Me + " [ --search ] [ --think ] [ --history N ]\n\n" +
-           "--search     =>  Enable Web searching in the AI.\n" +
-           "--think      =>  Enable reasoning in the AI.\n" +
-           "--history N  =>  Keep N most recent user/AI messages (default: %v).\n" +
-           "                 (N must be an even integer.)\n"
-
-    fmt.Printf(msg, DEFAULT_MAX_RECENT_MESSAGES)
-    os.Exit(1)
-}
-
-// This function will be called (due to AddHandler) every time a new message is send on any
-// channel (or DM) that the bot can see.
+// This function will be called (due to AddHandler) every time a new message is seen by this bot in
+// any channel or DM.
 func handleMessageCreateEvent(session *discordgo.Session, messageCreateEvent *discordgo.MessageCreate) {
     // Ignore all messages created by the bot itself
     if messageCreateEvent.Author.ID == session.State.User.ID {
         return
     }
 
-    // For debugging.
-    fmt.Printf("messageCreateEvent.Author.Username = '%s'\n", messageCreateEvent.Author.Username)
-    fmt.Printf("messageCreateEvent.ChannelID = '%s'\n", messageCreateEvent.ChannelID)
-    fmt.Printf("messageCreateEvent.GuildID = '%s'\n", messageCreateEvent.GuildID)
-    if messageCreateEvent.Member != nil {
-        fmt.Println("messageCreateEvent.Member.Nick =", messageCreateEvent.Member.Nick)
-    }
-
-    // Strip leading and trailing whitespace.
-    messageCreateEvent.Content = strings.TrimSpace(messageCreateEvent.Content)
+    // Strip leading and trailing whitespace from the message.
+    userMessage := strings.TrimSpace(messageCreateEvent.Content)
 
     // Ignore empty messages and messages that don't start with the command prefix.
-    if len(messageCreateEvent.Content) == 0 || !strings.HasPrefix(messageCreateEvent.Content, "!") {
+    if len(userMessage) == 0 || !strings.HasPrefix(userMessage, "!") {
         return
     }
 
     // Break the message string into words and extract the command word.
-    messageParts := strings.Fields(messageCreateEvent.Content)
+    messageParts := strings.Fields(userMessage)
     command := strings.ToLower(messageParts[0])
+
+    // Get the channel ID that will be used to send messages to the channel.  This is NOT the
+    // channel name.
+    channelID := messageCreateEvent.ChannelID
 
     switch command {
     case "!help":
         // Display the help message.
-        sendHelpMessage(session, messageCreateEvent)
+        sendHelpMessage(session, channelID)
 
     case "!status":
         // Display the status message.
-        sendStatusMessage(session, messageCreateEvent)
+        sendStatusMessage(session, channelID)
 
     case "!!say":
         // Process the '!!say ...' command.
@@ -248,12 +237,55 @@ func handleMessageCreateEvent(session *discordgo.Session, messageCreateEvent *di
     default:
         // For all other uses of '!...', send the message to the AI to generate a reply and then
         // send it to the channel/DM .
-        sendAIGeneratedResponse(session, messageCreateEvent)
+
+        // First, get the name of the channel where the message was received by this bot and the
+        // nick of the user who sent the message.  If the message is a DM, the channel name is the
+        // empty string.  If either is not available due to an error, it will be "unknown".
+        channelName, nick := getChannelAndNick(session, messageCreateEvent)
+
+        // Generate the response and sent it.
+        sendAIGeneratedResponse(session, channelID, channelName, nick, userMessage)
     }
 }
 
+// This function returns the name of the channel where the message was sent and the nick of the user
+// who sent the message.  If the message is a DM, the channel name is the empty string.  If either
+// one is unavailable due to an error, it is returned as "unknown" and an error is written to
+// stdout.
+func getChannelAndNick(session *discordgo.Session, messageCreateEvent *discordgo.MessageCreate) (string, string) {
+    // Get the name of the channel the message was sent from.
+    var channelName string
+
+    channel, err := session.Channel(messageCreateEvent.ChannelID)
+
+    if err != nil {
+        // We don't know which channel this message was sent from.
+        fmt.Printf("%v: getChannelAndNick: Error getting channel name: %v\n", Me, err)
+        channelName = "unknown"
+    } else {
+        channelName = channel.Name  // In a DM, this is the empty string.
+    }
+    
+    // Get the nick of the Discord user who send the mssage.
+    var nick string
+
+    if messageCreateEvent.Author == nil || messageCreateEvent.Author.GlobalName == "" {
+        // We don't know the nick of the user who sent this message.
+        fmt.Println("messageCreateEvent.Author = nil")
+        nick = "unknown"
+    } else {
+        nick = messageCreateEvent.Author.GlobalName
+    }
+
+    // For debugging.
+    // fmt.Printf("channelName = '%v'\n", channelName)
+    // fmt.Printf("nick = '%v'\n", nick)
+
+    return channelName, nick
+}
+
 // This function sends the help message to the channel/DM where messageCreateEvent came from.
-func sendHelpMessage(session *discordgo.Session, messageCreateEvent *discordgo.MessageCreate) {
+func sendHelpMessage(session *discordgo.Session, channelID string) {
     helpMsg := "I'm a bot written in Go by Fran, Gemini, and Claude.  My responses are generated by Claude. " +
                "Talk to me by starting your message with '`!`'. For example:\n\n" +
                "• `!What is the mass of Jupiter?`\n" +
@@ -266,11 +298,11 @@ func sendHelpMessage(session *discordgo.Session, messageCreateEvent *discordgo.M
                "• `!status` - Shows my status and uptime.\n" +
                "• `!help`   - Shows this help message."
 
-    session.ChannelMessageSend(messageCreateEvent.ChannelID, helpMsg)
+    session.ChannelMessageSend(channelID, helpMsg)
 }
 
 // This function sends a status message to the channel/DM where messageCreateEvent came from.
-func sendStatusMessage(session *discordgo.Session, messageCreateEvent *discordgo.MessageCreate) {
+func sendStatusMessage(session *discordgo.Session, channelID string) {
     states := []string{"nominal", "behaving", "rocking it", "within reason", "pretty good", "being real",
                        "killing it", "grooving", "just peachy", "okey dokey", "fine, just fine",
                        "... oh never mind", "reasonable", "adequate", "plausible", "howling", "meh",
@@ -288,7 +320,7 @@ func sendStatusMessage(session *discordgo.Session, messageCreateEvent *discordgo
         msg += " Extended thinking is enabled."
     }
 
-    session.ChannelMessageSend(messageCreateEvent.ChannelID, msg)
+    session.ChannelMessageSend(channelID, msg)
 }
 
 // This function handles the '!!say CHANNEL MESSAGE' command.
@@ -329,45 +361,30 @@ func handleSayCommand(session *discordgo.Session, messageCreateEvent *discordgo.
         session.ChannelMessageSend(messageCreateEvent.ChannelID, errMsg)
     } else {
         // The message was sent successfully, so send a confirmation message.
-        msg := fmt.Sprintf("Message sent to channel '%s'.", channelName)
+        msg := fmt.Sprintf("Message sent to channel '%v'.", channelName)
         session.ChannelMessageSend(messageCreateEvent.ChannelID, msg)
     }
 }
 
-// This function returns the system prompt to be sent in each JSON request to the AI.
-func getSystemPrompt() string {
-    todaysDate := time.Now().Format(time.DateOnly)
+// TODO: Move all AI-related functions to new source file ai.go.
 
-    var webSearchPrompt string
-
-    if reasoningEnabled {
-        webSearchPrompt = "Only use the Web search tool when you do not have the necessary " +
-                          "knowledge to respond. "
-    } else {
-        webSearchPrompt = "."
-    }
-
-    return fmt.Sprintf("Today's date is %s. You are a helpful assistant that provides concise and " +
-                       "accurate answers to user queries. Your responses should be short: only 2 or 3 " +
-                       "sentences. " +
-                       webSearchPrompt +
-                       "The user is one of a group of people connected to a Discord server (as are you), " +
-                       "but you cannot distinguish one user from another. Your output must use Discord " +
-                       "markdown so that it renders correctly.", todaysDate)
-}
+// =============================================================================
+// UNDER CONSTRUCTION
+// =============================================================================
 
 // This function sends a message generated by the AI backend in response to the user's message.
-func sendAIGeneratedResponse(session *discordgo.Session, messageCreateEvent *discordgo.MessageCreate) {
+func sendAIGeneratedResponse(session *discordgo.Session, channelID string, channelName string,
+                             nick string, userMessage string) {
     // Remove the leading '!' from messageCreateEvent.Content.
-    userMessage := strings.TrimPrefix(messageCreateEvent.Content, "!")
+    userMessage = strings.TrimPrefix(userMessage, "!")
 
     // Complain if userMessage is too long.
     maxUserMessageChars := 1000
 
     if len(userMessage) > maxUserMessageChars {
         msg := fmt.Sprintf("Sorry, I can't respond to messages that are longer than %v characters.",
-            maxUserMessageChars)
-        session.ChannelMessageSend(messageCreateEvent.ChannelID, msg)
+                           maxUserMessageChars)
+        session.ChannelMessageSend(channelID, msg)
         return
     }
 
@@ -383,13 +400,13 @@ func sendAIGeneratedResponse(session *discordgo.Session, messageCreateEvent *dis
         // Too little time has passed since the previous message to this bot.
         msg := fmt.Sprintf("Sorry, I'm overloaded. Please wait %v seconds before talking to me.",
                            secondsUntilMessagesAllowed)
-        session.ChannelMessageSend(messageCreateEvent.ChannelID, msg)
+        session.ChannelMessageSend(channelID, msg)
     } else {
         // Generate a response from the AI.  Does not yet support Web search or thinking.
-        aiResponse := getAIResponse(userMessage, false, false)
+        aiResponse := getAIResponse(userMessage, channelName, nick)
 
         // Send the response text to the Discord server.
-        session.ChannelMessageSend(messageCreateEvent.ChannelID, aiResponse)
+        session.ChannelMessageSend(channelID, aiResponse)
     }
 
     // Remember the time that this message was processed.
@@ -399,19 +416,16 @@ func sendAIGeneratedResponse(session *discordgo.Session, messageCreateEvent *dis
 // This function obtains an AI-generated response to a user message received from Discord.  If
 // successful, it returns the AI-generated response, otherwise it returns a string describing the
 // nature of the error.  
-func getAIResponse(userMessage string, useWebSearch bool, useThinking bool) string {
+func getAIResponse(userMessage string, channelName string, nick string) string {
     // This is the API endpoint URL.  See https://docs.anthropic.com/en/api/overview for details
     // about the Claude API.
     url := "https://api.anthropic.com/v1/messages"
 
     // Save the user message as the newest element in the conversation history.  This must happen
     // before we call json.Marshal(jsonObject).
-    recentMessages.PushFront(map[string]string{ "role": "user", "content": userMessage })
+    historySaveNewMessage("user", userMessage, channelName, nick)
 
-    // For debugging.
-    fmt.Printf("getAIResponse: recentMessages.Len() = %v\n", recentMessages.Len())
-
-    // Create the JSON request.
+    // Create the JSON request.  jsonObject will be passed to json.Marshal to convert it into JSON.
     jsonObject := make(map[string]any)
 
     // TODO: Switch these next two lines.
@@ -420,14 +434,20 @@ func getAIResponse(userMessage string, useWebSearch bool, useThinking bool) stri
     jsonObject["max_tokens"] = maxTokens         // The maximum number of tokens the AI will generate.
     jsonObject["system"] = getSystemPrompt()
 
-    recentMessagesSlice, err := getRecentMessagesAsSlice()
+    // Get the message history for this channel or nick.  Use nick if channelName is the empty
+    // string, which means we're handling a DM from a user to the bot.
+    var recentMessagesSlice []map[string]string
+    var err error
+
+    recentMessagesSlice, err = historyAsSlice(nick, channelName)
 
     if err != nil {
-        msg := fmt.Sprintf("Error: getRecentMessagesAsSlice failed: %s", err)
+        msg := fmt.Sprintf("%v: getAIResponse: historyAsSlice failed: %v", Me, err)
         fmt.Println(msg)
         return msg
     }
 
+    // Store the recent messages slice in map jsonObject.
     jsonObject["messages"] = recentMessagesSlice
 
     if reasoningEnabled {
@@ -444,7 +464,7 @@ func getAIResponse(userMessage string, useWebSearch bool, useThinking bool) stri
     requestBody, err := json.Marshal(jsonObject)
 
     if err != nil {
-        msg := fmt.Sprintf("Error: Error marshaling request: %s", err)
+        msg := fmt.Sprintf("%v: getAIResponse: json.Marshal failed: %v", Me, err)
         fmt.Println(msg)
         return msg
     }
@@ -456,7 +476,7 @@ func getAIResponse(userMessage string, useWebSearch bool, useThinking bool) stri
     req, err := http.NewRequest("POST", url, bytes.NewBuffer(requestBody))
 
     if err != nil {
-        msg := fmt.Sprintf("Error: Error creating HTTP request: %s", err)
+        msg := fmt.Sprintf("%v: getAIResponse: Error creating HTTP request: %v", Me, err)
         fmt.Println(msg)
         return msg
     }
@@ -472,7 +492,7 @@ func getAIResponse(userMessage string, useWebSearch bool, useThinking bool) stri
     httpResponse, err := client.Do(req)
 
     if err != nil {
-        msg := fmt.Sprintf("Error: Network communication error: %s", err)
+        msg := fmt.Sprintf("%v: getAIResponse: Network communication error: %v", Me, err)
         fmt.Println(msg)
         return msg
     }
@@ -482,44 +502,38 @@ func getAIResponse(userMessage string, useWebSearch bool, useThinking bool) stri
 
     // Handle HTTP errors.
     if httpResponse.StatusCode != http.StatusOK {
-        msg := fmt.Sprintf("Error: HTTP error: %s", httpResponse.Status)
+        msg := fmt.Sprintf("%v: getAIResponse: HTTP error: %v", Me, httpResponse.Status)
         fmt.Println(msg)
         return msg
     }
 
     // Parse the HTTP response from the AI and return the text of the response.
-    return parseAIResponse(httpResponse)
+    return parseAIResponse(httpResponse, channelName, nick)
 }
 
-// This function converts package-scope variable recentMessages into a slice of map[string]string.
-func getRecentMessagesAsSlice() ([]map[string]string, error) {
-    // This will hold the slice of messages to be sent in the JSON request.
-    messagesSlice := make([]map[string]string, 0, recentMessages.Len())
+// This function returns the system prompt to be sent in each JSON request to the AI.
+func getSystemPrompt() string {
+    todaysDate := time.Now().Format(time.DateOnly)
 
-    // Iterate over the elements of recentMessages, which is a list of maps, and append each map to
-    // messagesSlice.
-    for element := recentMessages.Back(); element != nil; element = element.Prev() {
-        // Get the map from the list element.
-        messageMap, ok := element.Value.(map[string]string)
+    var webSearchPrompt string
 
-        if !ok {
-            // This should never happen, because we only push instances of map[string]string into
-            // list recentMessages.
-            msg := "Error: getRecentMessagesAsSlice: Failed to get map from recentMessages!"
-            fmt.Println(msg)
-            return nil, fmt.Errorf(msg)
-        }
-
-        // Append messageMap to messagesSlice.
-        messagesSlice = append(messagesSlice, messageMap)
+    if reasoningEnabled {
+        webSearchPrompt = "Only use the Web search tool when you do not have the necessary " +
+                          "knowledge to respond. "
     }
 
-    return messagesSlice, nil
+    return fmt.Sprintf("Today's date is %s. You are a helpful assistant that provides concise and " +
+                       "accurate answers to user queries. Your responses should be short: only 2 or 3 " +
+                       "sentences. " +
+                       webSearchPrompt +
+                       "The user is one of a group of people connected to a Discord server (as are you), " +
+                       "but you cannot distinguish one user from another. Your output must use Discord " +
+                       "markdown so that it renders correctly.", todaysDate)
 }
 
 // This function processes the HTTP response from the AI and returns the AI-generated response text.
-func parseAIResponse(httpResponse *http.Response) string {
-    jsonBytes, jsonBytesCount, msg := getJSON(httpResponse)
+func parseAIResponse(httpResponse *http.Response, channelName string, nick string) string {
+    jsonBytes, jsonBytesCount, msg := getJSONFromHTTPResponse(httpResponse)
 
     if msg != "" {
         return msg
@@ -552,6 +566,12 @@ func parseAIResponse(httpResponse *http.Response) string {
 
     // This will hold the reasoning trace returned by the AI.
     thinkingText := ""
+
+    // TODO: Refactor this for loop into a new function.
+
+    // =============================================================================
+    // UNDER CONSTRUCTION
+    // =============================================================================
 
     // Iterate over all elements of contentSlice and concatenate the text.  contentSlice is a slice
     // of maps.  This loop extracts the text from each element of contentSlice that has a "type" key
@@ -606,22 +626,8 @@ func parseAIResponse(httpResponse *http.Response) string {
         }
     }
 
-    // Update recentMessages to have the AI's response.
-    recentMessages.PushFront(map[string]string{ "role": "assistant",
-                                                "content": thinkingText + "\n\n" + aiText })
-
-    // If the length of list recentMessages equals or exceeds maxRecentMessages + 2, remove the 2
-    // oldest elements.  We remove the 2 oldest to maintain the invariant that the list always
-    // contains pairs of "user" and "assistant" elements, which alternate in the list.  We use
-    // 'maxRecentMessages + 2' so that after removing the 2 oldest messages, there are
-    // maxRecentMessages remaining, so the AI will see all of them on the next user query.
-    if recentMessages.Len() >= maxRecentMessages + 2 {
-        recentMessages.Remove(recentMessages.Back())
-        recentMessages.Remove(recentMessages.Back())
-    }
-
-    // For debugging.
-    fmt.Printf("parseAIResponse: recentMessages.Len() = %v\n", recentMessages.Len())
+    // Update the conversation history to have the AI's response.
+    historySaveNewMessage("assistant", thinkingText + "\n\n" + aiText, channelName, nick)
 
     // Return the AI-generated response.
     if reasoningEnabled {
@@ -633,7 +639,7 @@ func parseAIResponse(httpResponse *http.Response) string {
 
 // This function reads the body of the HTTP response and returns the JSON as a byte slice, the
 // number of bytes read, and an error if any.  If no error occurs, the string returned is "".
-func getJSON(httpResponse *http.Response) ([]byte, int, string) {
+func getJSONFromHTTPResponse(httpResponse *http.Response) ([]byte, int, string) {
     // Get the 'Content-Length' header so we know how big to make the byte slice that will hold
     // the response body.
     contentLength := httpResponse.ContentLength
